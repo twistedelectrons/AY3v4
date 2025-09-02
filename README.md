@@ -1,4 +1,4 @@
-# AY3
+# AY3 version 4
 
 This is the Atmega1284 firmware for the [AY3 Synthesizer](https://www.twistedelectrons.com/ay3).
 

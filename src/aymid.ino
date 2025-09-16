@@ -367,16 +367,10 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
         {0, runEnvType, false},
     };
 
-    if (size < 8) {
-        // Must be at least one 3 header (ID), 2 mask bytes and 2 msb bytes and 1 data byte
-        return;
-    }
 
     switch (buffer[2]) {
         case 0x4c:
             // Start play
-            //setupTimer();
-
             if (!aymidState.enabled) {
                 aymidState.enabled = true;
                 initializeAY3s();
@@ -387,7 +381,9 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
 
         case 0x4d:
             // Stop playback
-            // Not implemented.
+            // reset registers raw, so remix state is kept
+            aymidState.enabled = false;
+            aymidResetAY3Chip(-1);
             break;
 
         case 0x4f:
@@ -396,6 +392,10 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
             break;
 
         case 0x4e:
+    
+            // Must be at least one 3 header (ID), 2 mask bytes and 2 msb bytes and 1 data byte, end flag [8]
+            if (size < 9) break;
+
             // Update AY3 registers
 
             byte aymidReg = 0;          // AYMID register location in buffer
@@ -572,4 +572,16 @@ void aymidTick()
             aymidState.slowTimer--;
         }
     }
+}
+
+/*
+ * Mute the AY3 chip by clearing all bits
+ */
+void aymidResetAY3Chip(int chip) {
+
+    // clear bits
+    initializeAY3s();
+
+    // update chips
+    updateLastAY3Values(chip);
 }

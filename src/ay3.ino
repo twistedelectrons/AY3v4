@@ -71,7 +71,7 @@ void mode_inactive2B()  { PORTD &= ~_BV(4); PORTD &= ~_BV(7); } // digitalWrite 
 
 void send1(unsigned char address, unsigned char data)
 {
-    // compressed send code
+    // optimized send code
     // --------------------
     // ignore: initial inactive
     // PORTD &= ~_BV(4); // digitalWrite (12, LOW);
@@ -103,7 +103,7 @@ void send1(unsigned char address, unsigned char data)
 
 void send2A(unsigned char address, unsigned char data)
 {
-    // compressed send code
+    // optimized send code
     // --------------------
     // ignore: initial inactive
     // PORTD &= ~_BV(4); // digitalWrite (12, LOW);

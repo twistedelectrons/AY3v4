@@ -185,6 +185,7 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
  * Initialize AY3s to known state, used first time entering AYMID mode
  */
 void initializeAY3s() {
+    // numerator (array size) / denominator (first element size) -> reg < 14bytes/1byte
     for (size_t reg = 0; reg < sizeof(aymidState.lastAY3values) / (sizeof(*aymidState.lastAY3values)); reg++) {
         aymidState.lastAY3values[reg] = 0;
     }
@@ -227,7 +228,7 @@ void setAY3Register(byte chip, byte address, byte data) {
 
 void updateLastAY3Values(int chip) {
 
-    for (size_t reg = 0; reg < 16; reg++) {
+    for (size_t reg = 0; reg < AY3_REGISTERS; reg++) {
 
         if (chip <= 0)              setAY3Register(0, reg, aymidState.lastAY3values[reg]); // 1st chip
         if (chip < 0 || chip == 1)  setAY3Register(1, reg, aymidState.lastAY3values[reg]); // 2nd chip
@@ -316,25 +317,22 @@ bool runEnvType(byte chip, byte, byte*) {
     return true;
 }
 
-void aymidProcessMessage(const byte* buffer, unsigned int size) {
+void handleAymidFrameUpdate(const byte* buffer) {
 
-    // Location of real AY3 register within the AYMID package
-    const byte AYMIDtoAY3regs[AY3_REGISTERS] = {
-        0x00, 0x01, // 12bit TonA (lo 8bit fine, hi 4Bit coarse)
-        0x02, 0x03, // 12bit TonB (lo 8bit fine, hi 4Bit coarse)
-        0x04, 0x05, // 12bit TonC (lo 8bit fine, hi 4Bit coarse)
-        0x06,       //  5bit Noise (period ctrl)
-        0x07,       //  8bit Mixer (aka 'enable') (IOB, IOA, Noise:C, B, A, Ton:C, B, A)
-        0x08,       //  5bit AmpA (M, L3, L2, L1, L0)
-        0x09,       //  5bit AmpB (M, L3, L2, L1, L0)
-        0x0a,       //  5bit AmpC (M, L3, L2, L1, L0)
-        0x0b, 0x0c, // 16bit Envelope (lo 8bit fine, hi 8Bit coarse)
-        0x0d        //  4bit EnvType (ake 'shape/cycle') (CONT, ATT, ALT, HOLD)
-        //0x0e,     //  8bit IO PortA (unused)
-        //0x0f      //  8bit IO PortB (unused)
-    };
-
-    // TODO... called by processSysex, midi logic is in here 
+    // location of AY3 register within the AYMID package (identical order)
+    //
+    // 0x00, 0x01,  // 12bit Tone A (lo 8bit fine, hi 4Bit coarse)
+    // 0x02, 0x03,  // 12bit Tone B (lo 8bit fine, hi 4Bit coarse)
+    // 0x04, 0x05,  // 12bit Tone C (lo 8bit fine, hi 4Bit coarse)
+    // 0x06,        //  5bit Noise (period ctrl)
+    // 0x07,        //  8bit Mixer (aka 'enable') (IOB, IOA, Noise:C, B, A, Ton:C, B, A)
+    // 0x08,        //  5bit Amp A (M, L3, L2, L1, L0)
+    // 0x09,        //  5bit Amp B (M, L3, L2, L1, L0)
+    // 0x0a,        //  5bit Amp C (M, L3, L2, L1, L0)
+    // 0x0b, 0x0c,  // 16bit Envelope (lo 8bit fine, hi 8Bit coarse)
+    // 0x0d         //  4bit EnvType (ake 'shape/cycle') (CONT, ATT, ALT, HOLD)
+    // 0x0e,        //  8bit IO PortA (unused)
+    // 0x0f         //  8bit IO PortB (unused)
 
     static byte newMaskBytes[AY3CHIPS][2];
     static byte newAY3Data[AY3CHIPS][AY3_REGISTERS];
@@ -347,26 +345,184 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
     };
 
     static struct regconfig_t regConfig[] = {
-        {0, NULL, true},
-        {0, NULL, true},
-        {1, NULL, true},
-        {1, NULL, true},
-        {2, NULL, true},
-        {2, NULL, true},
+        {0, NULL, true}, {0, NULL, true},   // Tone A
+        {1, NULL, true}, {1, NULL, true},   // Tone B
+        {2, NULL, true}, {2, NULL, true},   // Tone C
 
-        {0, runNoise, false},    // TODO ... ch?
-        {0, runMixer, false},
+        {0, runNoise, false},               // Noise
+        {0, runMixer, false},               // Mixer
 
-        {0, runAmp, false},
-        {1, runAmp, false},
-        {2, runAmp, false},
+        {0, runAmp, false},                 // Amp A
+        {1, runAmp, false},                 // Amp B
+        {2, runAmp, false},                 // Amp C
 
-        {0, runEnvelopeLO, false},
-        {0, runEnvelopeHI, false},
+        {0, runEnvelopeLO, false},          // Env LO
+        {0, runEnvelopeHI, false},          // Env HI
 
-        {0, runEnvType, false},
+        {0, runEnvType, false},             // Env shape
     };
 
+    byte reg = 0;           // aymid register location in buffer (no mapping is needed)
+    byte dataIdx = 2 + 2;   // data location in buffer (masks, msbs first)
+    byte data, field, chip;
+
+    bool pitchUpdate[AY3VOICES];
+
+    // not running? enable ..
+    if (!aymidState.enabled) {
+        aymidState.enabled = true;
+        initializeAY3s();
+        aymidRestore(-1); // TODO
+    }
+
+    // TODO - ANY DISPLAY UPDATE FLAGS
+
+    // Default - no pitches received
+    for (byte i = 0; i < AY3VOICES; i++) {
+        pitchUpdate[i] = false;
+    }
+
+    // Clean out mask bytes to prepare for new values per chip
+    for (chip = 0; chip < AY3CHIPS; chip++) {
+        for (byte z = 0; z < 2; z++) {
+            newMaskBytes[chip][z] = 0;
+        }
+    }
+
+    // Build up the 8-bit data from scattered pieces
+    // First comes two 7-bit mask bytes, followed by two 7-bit MSB bytes,
+    // then the data according to enabled mask
+    byte maskByte;
+    for (maskByte = 0; maskByte < 2; maskByte++) {
+
+        field = 0x01;
+        for (byte bit = 0; bit < 7; bit++) {
+            if ((buffer[maskByte] & field) == field) {
+                // It is a hit. Build the complete data byte
+                data = buffer[dataIdx++];
+                if (buffer[maskByte + 2] & field) {
+                    // MSB was set
+                    data += 0x80;
+                }
+
+// debugging enable register R7 (all off)
+/*if (maskByte == 1 && bit == 0) {
+
+newMaskBytes[0][maskByte] |= field;
+newAY3Data[0][reg] = B11111111;
+newMaskBytes[1][maskByte] |= field;
+newAY3Data[1][reg] = B11111111;
+
+// Move to next register in AYMID message
+field <<= 1;
+reg++;
+continue;
+}*/
+
+                assert(reg < AY3_REGISTERS);
+
+                // Save original values for later
+                aymidState.lastAY3values[reg] = data;
+
+                // Store AY3 parameters per chip (with modifications according
+                // to performance controls, if applicable)
+                if (reg < AY3_REGISTERS) {
+                    regconfig_t* regConf = &(regConfig[reg]);
+                    if (regConf->isPitch) {
+                        // No need to store pitch data as we're updating it
+                        // from source later. Retune always needed due to
+                        // AY3 clock differences
+                        pitchUpdate[regConf->voice] = true;
+                    } else if (regConf->runRegFunction) {
+                        // The regular case, run a modification function and find
+                        // if value should be kept. New structure per chip created.
+                        for (chip = 0; chip < AY3CHIPS; chip++) {
+                            bool useData = true;
+                            byte modData = data;
+                            if (!aymidState.isCleanMode) {
+                                useData = regConf->runRegFunction(chip, regConf->voice, &modData);
+                            }
+                            if (useData) {
+                                newMaskBytes[chip][maskByte] |= field;
+                                newAY3Data[chip][reg] = modData;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Move to next register in AYMID message
+            field <<= 1;
+            reg++;
+        }
+    }
+
+    // Recalculate pitches
+    for (chip = 0; chip < AY3CHIPS; chip++) {
+        aymidUpdatePitch(pitchUpdate, newMaskBytes[chip], newAY3Data[chip], chip);
+    }
+
+    // Send all updated AY3 registers
+    for (chip = 0; chip < AY3CHIPS; chip++) {
+        reg = 0;
+        for (maskByte = 0; maskByte < 2; maskByte++) {
+            field = 0x01;
+            for (byte bit = 0; bit < 7; bit++) {
+                if ((newMaskBytes[chip][maskByte] & field) == field) {
+                    setAY3Register(chip, reg, newAY3Data[chip][reg]);
+                }
+
+                // Move to next register in AYMID struct
+                field <<= 1;
+                reg++;
+            }
+        }
+    }
+// TODO:
+/*          // Visualize everything - done after sound is produced to maximize good timing.
+    // Chip2 is shown if corresponding button held down by the user, otherwise chip1
+    chip = aymidState.selectedAY3s.b.sid2 && !aymidState.selectedAY3s.b.sid1 ? 1 : 0;
+
+    // Refresh some seldom used registers, to display when AY3 select buttons held
+    if (aymidState.slowTimer == 0) {
+        aymidState.slowTimer = 4; // 39Hz/4 => 100ms response time
+        // Get the latest used SID register data
+        newAY3Data[chip][20] = sid_chips[chip].get_current_register(SID_FILTER_RESONANCE_ROUTING);
+        newAY3Data[chip][21] = sid_chips[chip].get_current_register(SID_FILTER_MODE_VOLUME);
+        newAY3Data[chip][19] = sid_chips[chip].get_current_register(SID_FILTER_CUTOFF_HI);
+        // Force masks on corresponding to the above
+        newMaskBytes[chip][2] |= 0x60;
+        newMaskBytes[chip][3] |= 0x01;
+    }
+
+    // Do the actual LED update
+    reg = 0;
+    for (maskByte = 0; maskByte < 2; maskByte++) {
+        field = 0x01;
+        for (byte bit = 0; bit < 7; bit++) {
+            if ((newMaskBytes[chip][maskByte] & field) == field) {
+                data = newAY3Data[chip][reg];
+                if (reg == SID_FILTER_MODE_VOLUME) {
+                    showFilterModeLEDs(data);
+                } else if (reg == SID_FILTER_RESONANCE_ROUTING) {
+                    showFilterResoLEDs(data);
+                    showFilterRouteLEDs(data);
+                } else if (reg == SID_FILTER_CUTOFF_HI) {
+                    showFilterCutoffLEDs(data);
+                } else if ((reg - SID_VC_CONTROL) % 7 == 0) {
+                    showWaveformLEDs((reg - SID_VC_CONTROL) / 7, data);
+                }
+            }
+
+            // Move to next register in ASID struct
+            field <<= 1;
+            reg++;
+        }
+    }
+*/
+}
+
+void aymidProcessMessage(const byte* buffer, unsigned int size) {
 
     switch (buffer[2]) {
         case 0x4c:
@@ -396,168 +552,10 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
             // Must be at least one 3 header (ID), 2 mask bytes and 2 msb bytes and 1 data byte, end flag [8]
             if (size < 9) break;
 
-            // Update AY3 registers
+            // handle with skipped header
+            handleAymidFrameUpdate(&buffer[3]);
 
-            byte aymidReg = 0;          // AYMID register location in buffer
-            byte dataIdx = 3 + 2 + 2;   // Data location in buffer (header, masks, msbs first)
-            byte data, reg, field, chip;
-            bool pitchUpdate[AY3VOICES];
-
-            if (!aymidState.enabled) {
-                aymidState.enabled = true;
-                initializeAY3s();
-                aymidRestore(-1); // TODO
-            }
-
-            // TODO - ANY DISPLAY UPDATE FLAGS
-
-            // Default - no pitches received
-            for (byte i = 0; i < AY3VOICES; i++) {
-                pitchUpdate[i] = false;
-            }
-
-            // Clean out mask bytes to prepare for new values per chip
-            for (chip = 0; chip < AY3CHIPS; chip++) {
-                for (byte z = 0; z < 2; z++) {
-                    newMaskBytes[chip][z] = 0;
-                }
-            }
-
-            // Build up the 8-bit data from scattered pieces
-            // First comes two 7-bit mask bytes, followed by two 7-bit MSB bytes,
-            // then the data according to enabled mask
-            byte maskByte;
-            for (maskByte = 0; maskByte < 2; maskByte++) {
-
-                field = 0x01;
-                for (byte bit = 0; bit < 7; bit++) {
-                    if ((buffer[3 + maskByte] & field) == field) {
-                        // It is a hit. Build the complete data byte
-                        data = buffer[dataIdx++];
-                        if (buffer[3 + maskByte + 2] & field) {
-                            // MSB was set
-                            data += 0x80;
-                        }
-
-// debugging enable register R7 (all off)
-/*if (maskByte == 1 && bit == 0) {
-
-    newMaskBytes[0][maskByte] |= field;
-    newAY3Data[0][aymidReg] = B11111111;
-    newMaskBytes[1][maskByte] |= field;
-    newAY3Data[1][aymidReg] = B11111111;
-
-    // Move to next register in AYMID message
-    field <<= 1;
-    aymidReg++;
-    continue;
-}*/
-
-                        assert(aymidReg < AY3_REGISTERS);
-
-                        // Get the mapped AY3 register
-                        reg = AYMIDtoAY3regs[aymidReg];
-
-                        // Save original values for later
-                        aymidState.lastAY3values[reg] = data;
-
-                        // Store AY3 parameters per chip (with modifications according
-                        // to performance controls, if applicable)
-                        if (reg < AY3_REGISTERS) {
-                            regconfig_t* regConf = &(regConfig[reg]);
-                            if (regConf->isPitch) {
-                                // No need to store pitch data as we're updating it
-                                // from source later. Retune always needed due to
-                                // AY3 clock differences
-                                pitchUpdate[regConf->voice] = true;
-                            } else if (regConf->runRegFunction) {
-                                // The regular case, run a modification function and find
-                                // if value should be kept. New structure per chip created.
-                                for (chip = 0; chip < AY3CHIPS; chip++) {
-                                    bool useData = true;
-                                    byte modData = data;
-                                    if (!aymidState.isCleanMode) {
-                                        useData = regConf->runRegFunction(chip, regConf->voice, &modData);
-                                    }
-                                    if (useData) {
-                                        newMaskBytes[chip][maskByte] |= field;
-                                        newAY3Data[chip][aymidReg] = modData;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Move to next register in AYMID message
-                    field <<= 1;
-                    aymidReg++;
-                }
-            }
-
-            // Recalculate pitches
-            for (chip = 0; chip < AY3CHIPS; chip++) {
-                aymidUpdatePitch(pitchUpdate, newMaskBytes[chip], newAY3Data[chip], chip);
-            }
-
-            // Send all updated AY3 registers
-            for (chip = 0; chip < AY3CHIPS; chip++) {
-                aymidReg = 0;
-                for (maskByte = 0; maskByte < 2; maskByte++) {
-                    field = 0x01;
-                    for (byte bit = 0; bit < 7; bit++) {
-                        if ((newMaskBytes[chip][maskByte] & field) == field) {
-                            setAY3Register(chip, AYMIDtoAY3regs[aymidReg], newAY3Data[chip][aymidReg]);
-                        }
-
-                        // Move to next register in AYMID struct
-                        field <<= 1;
-                        aymidReg++;
-                    }
-                }
-            }
-// TODO:
-/*          // Visualize everything - done after sound is produced to maximize good timing.
-            // Chip2 is shown if corresponding button held down by the user, otherwise chip1
-            chip = aymidState.selectedAY3s.b.sid2 && !aymidState.selectedAY3s.b.sid1 ? 1 : 0;
-
-            // Refresh some seldom used registers, to display when AY3 select buttons held
-            if (aymidState.slowTimer == 0) {
-                aymidState.slowTimer = 4; // 39Hz/4 => 100ms response time
-                // Get the latest used SID register data
-                newAY3Data[chip][20] = sid_chips[chip].get_current_register(SID_FILTER_RESONANCE_ROUTING);
-                newAY3Data[chip][21] = sid_chips[chip].get_current_register(SID_FILTER_MODE_VOLUME);
-                newAY3Data[chip][19] = sid_chips[chip].get_current_register(SID_FILTER_CUTOFF_HI);
-                // Force masks on corresponding to the above
-                newMaskBytes[chip][2] |= 0x60;
-                newMaskBytes[chip][3] |= 0x01;
-            }
-
-            // Do the actual LED update
-            aymidReg = 0;
-            for (maskByte = 0; maskByte < 2; maskByte++) {
-                field = 0x01;
-                for (byte bit = 0; bit < 7; bit++) {
-                    if ((newMaskBytes[chip][maskByte] & field) == field) {
-                        reg = AYMIDtoAY3regs[aymidReg];
-                        data = newAY3Data[chip][aymidReg];
-                        if (reg == SID_FILTER_MODE_VOLUME) {
-                            showFilterModeLEDs(data);
-                        } else if (reg == SID_FILTER_RESONANCE_ROUTING) {
-                            showFilterResoLEDs(data);
-                            showFilterRouteLEDs(data);
-                        } else if (reg == SID_FILTER_CUTOFF_HI) {
-                            showFilterCutoffLEDs(data);
-                        } else if ((reg - SID_VC_CONTROL) % 7 == 0) {
-                            showWaveformLEDs((reg - SID_VC_CONTROL) / 7, data);
-                        }
-                    }
-
-                    // Move to next register in ASID struct
-                    field <<= 1;
-                    aymidReg++;
-                }
-            }
-*/
+            // LED visualization
             break;
     }
 }

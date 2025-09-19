@@ -2,6 +2,14 @@
 #include <EEPROM.h>
 #include <assert.h>
 
+/***********************************
+    -= AY3 version 4 (0.60) =-
+        + synth engine overhaul
+        + AYMID support
+
+    twisted electrons  (c) 2025
+***********************************/
+
 enum class InitState { ALL, TONE, NOISE, MIXER, AMP, ENVELOPE };
 enum class PitchType { TONE, NOISE, ENVELOPE };
 
@@ -15,10 +23,14 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define ZXTUNING        1           // ADAPT NOTES/ENV VALUES AS FOR ATARI CLOCK
 #define CLOCK_LOW_EMU   1           // CLOCK LOW FREQ ADAPTION (500Hz), old firmware emulation
 
-// timing
+// timing (!don't touch!)
 #define COUNT_DELAY_ZX  2           // time-critical (sync: 0..4)           <<< initial offset <<< ?
 #define ASYNC_DELAY     62          // time-critical (sync: 31, 62, 124..)  >>> fine offset >>> ?
 #define ENC_TIMER       300
+#define SAMPLE_CYCLE    30          // sampling of pitches & glides
+#define PROCESS_CYCLE   6           // processing of midi clock, arp, lfo, calculate pitches
+#define SEQ_CYCLES      190         // processing of sequencer steps by internal clock, mixer (no midi)
+
 
 // config
 #define CFG_MIDICHANNEL 1           // MASTER CHANNEL
@@ -500,7 +512,7 @@ void loop()
     // SAMPLING DIVIDER
     //
 
-    if (samplecc >= 30) {
+    if (samplecc >= SAMPLE_CYCLE) {
         samplecc = 0;
         doSample();
     }
@@ -511,7 +523,7 @@ void loop()
     // PROCESS DIVIDER (CLOCK, LFO, ARP)
     //
 
-    if (processcc >= 6) {
+    if (processcc >= PROCESS_CYCLE) {
         processcc = 0;
         doProcess();
     }
@@ -522,7 +534,7 @@ void loop()
     // SEQUENCING DIVIDER
     //
 
-    if (seqtickcc >= 190) {
+    if (seqtickcc >= SEQ_CYCLES) {
         seqtickcc = 0;
         doSequencer();
     }

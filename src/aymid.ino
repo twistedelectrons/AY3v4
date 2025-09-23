@@ -5,10 +5,6 @@
 // - update these registers to 0 interferes with the LED matrix (CFG_CLOCKTYPE mode, LED matrix switches off)
 //
 
-#define AY3VOICES 3
-#define AY3CHIPS 2
-#define AY3_REGISTERS 14
-
 #define POT_VALUE_TO_AYMID_ENV_PERIOD(x) (x << 6)
 #define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (x)
 #define POT_VALUE_TO_AYMID_FINETUNE(x) ((value >> 4) + 978) // TODO!:
@@ -52,11 +48,6 @@
 //   0           0           0
 
 
-enum class ChannelState { AY3FILE, ABC, ACB, BAC, BCA, CAB, CBA };  // i wanna set A B/2 to the 
-enum class AmpState { AY3FILE, M, L3, L2, L1, L0 };
-enum class EnvTypeState { AY3FILE, CONT, ATT, ALT, HOLD };
-enum class OverrideState { AY3FILE, ON, OFF };
-
 union selected_AY3s_t {
     byte all;
     struct bits {
@@ -68,14 +59,15 @@ union selected_AY3s_t {
 struct aymidState_t {
     bool enabled;
 
-    bool muteChannel[AY3CHIPS][AY3VOICES]; // includes ton, noise, envelope
+    bool muteChannel[AY3CHIPS][AY3VOICES]; // includes tone, noise, envelope
 
     ChannelState overrideChannel[AY3CHIPS];
     EnvTypeState overrideEnvType[AY3CHIPS];
 
     AmpState overrideAmp[AY3CHIPS][AY3VOICES];
-    OverrideState overrideTon[AY3CHIPS][AY3VOICES];
+    OverrideState overrideTone[AY3CHIPS][AY3VOICES];
     OverrideState overrideNoise[AY3CHIPS][AY3VOICES];
+    OverrideState overrideEnv[AY3CHIPS][AY3VOICES];
 
     int adjustOctave[AY3CHIPS][AY3VOICES];
     int adjustFine[AY3CHIPS][AY3VOICES];
@@ -168,17 +160,21 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
 
         bool initTone       = init == InitState::ALL || init == InitState::TONE;
         bool initNoise      = init == InitState::ALL || init == InitState::NOISE;
+        bool initEnvelope   = init == InitState::ALL || init == InitState::ENVELOPE;
         bool initAmplitude  = init == InitState::ALL || init == InitState::AMP;
 
         if (initTone) {
             aymidState.muteChannel[chip][voice] = false;
-            aymidState.overrideTon[chip][voice] = OverrideState::AY3FILE;
+            aymidState.overrideTone[chip][voice] = OverrideState::AY3FILE;
             aymidState.adjustOctave[chip][voice] = 0;
             aymidState.adjustFine[chip][voice] = FINETUNE_0_CENTS;
         }
 
         if (initNoise)
             aymidState.overrideNoise[chip][voice] = OverrideState::AY3FILE;
+
+        if (initEnvelope)
+            aymidState.overrideEnv[chip][voice] = OverrideState::AY3FILE;
 
         if (initAmplitude)
             aymidState.overrideAmp[chip][voice] = AmpState::AY3FILE;
@@ -299,12 +295,43 @@ bool runNoise(byte chip, byte, byte*) {
     return true;
 }
 
-bool runMixer(byte chip, byte, byte*) {
+bool runMixer(byte chip, byte voice, byte* data) {
+
+    for (voice = 0; voice < AY3VOICES; voice++) {
+
+        // Mute channel
+        if (aymidState.muteChannel[chip][voice]) {
+            *data |= B00001001 << voice;
+
+        } else {
+
+            // Voice
+            if (aymidState.overrideTone[chip][voice] == OverrideState::ON) {
+                *data &= ~( B00000001 << voice);
+            } else if (aymidState.overrideTone[chip][voice] == OverrideState::OFF) {
+                *data |=    B00000001 << voice;
+            }
+
+            // Noise
+            if (aymidState.overrideNoise[chip][voice] == OverrideState::ON) {
+                *data &= ~( B00000001 << (voice+3));
+            } else if (aymidState.overrideNoise[chip][voice] == OverrideState::OFF) {
+                *data |=    B00000001 << (voice+3);
+            }
+        }
+    }
 
     return true;
 }
 
-bool runAmp(byte chip, byte voice, byte*) {
+bool runAmp(byte chip, byte voice, byte* data) {
+
+    // Env
+    if (aymidState.overrideEnv[chip][voice] == OverrideState::ON) {
+        *data &= ~( B00010000);
+    } else if (aymidState.overrideEnv[chip][voice] == OverrideState::OFF) {
+        *data |=    B00010000;
+    }
 
     return true;
 }
@@ -611,4 +638,21 @@ void aymidResetAY3Chip(int chip) {
 
     // clear display
     resetDisplay();
+}
+
+/*
+ * update triState button [ON, OFF, AY3FILE]
+ */
+void updateTriStateButtonAymid(byte chip, byte index, bool all, OverrideState buttonState[][AY3VOICES]) {
+    if (buttonState[chip][index] == OverrideState::OFF) {
+        buttonState[chip][index] = OverrideState::AY3FILE;
+    } else {
+        buttonState[chip][index] = static_cast<OverrideState>(static_cast<int>(buttonState[chip][index]) + 1);
+    }
+    if (all) {
+        // Copy from 0 to other chips
+        for (byte i = 1; i < AY3CHIPS; i++) {
+            buttonState[i][index] = buttonState[0][index];
+        }
+    }
 }

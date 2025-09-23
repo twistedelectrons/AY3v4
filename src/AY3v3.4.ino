@@ -11,6 +11,10 @@
 ***********************************/
 
 enum class InitState { ALL, TONE, NOISE, MIXER, AMP, ENVELOPE };
+enum class ChannelState { AY3FILE, ABC, ACB, BAC, BCA, CAB, CBA };
+enum class AmpState { AY3FILE, M, L3, L2, L1, L0 };
+enum class EnvTypeState { AY3FILE, CONT, ATT, ALT, HOLD };
+enum class OverrideState { AY3FILE, ON, OFF };
 enum class PitchType { TONE, NOISE, ENVELOPE };
 
 //
@@ -57,6 +61,10 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define ENCPINB         10          // DATA
 
 // consts
+#define AY3VOICES       3
+#define AY3CHIPS        2
+#define AY3_REGISTERS   14
+
 #define MASTER          0           // MASTER INDEX (for held, arpStep, arpOct, noteMem)
 
 #define ARP_UP          1           // ARPEGGIATOR MODES

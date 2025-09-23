@@ -73,8 +73,49 @@ void doButtons()
     if (btntickcc > 3) btntickcc = 0;
 }
 
+byte indexFromPin(int pin) {
+    switch (pin) {
+        default:
+
+        // COLS
+        case 11:    return 0;
+        case 2:     return 1;
+        case 6:     return 2;
+
+        // ROWS
+        case 8:     return 0;
+        case 5:     return 1;
+        case 10:    return 2;
+        case 7:     return 3;
+        case 4:     return 4;
+    }
+}
+
 void buttPressedAymid(int pin, int state)
 {
+    byte index = indexFromPin(pin);
+    byte chip;
+
+    bool all = false;
+
+    // Find out what chips are selected
+    // If one pressed - execute actions only on that chip
+    // If all active  - execute chip 0 then copy to other chips (executing actions if needed)
+
+    if (aymidState.selectedAY3s.all == 0) {
+
+        // All chips should be affected
+        all = true;
+        chip = 0;
+
+    } else {
+
+        // One chip selected
+        if      (aymidState.selectedAY3s.b.AY3 && !aymidState.selectedAY3s.b.AY32)  chip = 0;
+        else if (aymidState.selectedAY3s.b.AY3 && !aymidState.selectedAY3s.b.AY32)  chip = 1;
+        else                                                                        chip = 2;
+    }
+
     // pressed
     if (state == 0) {
 
@@ -91,23 +132,11 @@ void buttPressedAymid(int pin, int state)
             //
 
             case 8:     // ROW 1: VOICE
-                        pressedRow = pressedRow == 1 ? 0 : 1;
-                        break;
-
             case 5:     // ROW 2: LFO/ARP
-                        pressedRow = pressedRow == 2 ? 0 : 2;
-                        break;
-
             case 10:    // ROW 3: NOISE
-                        pressedRow = pressedRow == 3 ? 0 : 3;
-                        break;
-
             case 7:     // ROW 4: ENV
-                        pressedRow = pressedRow == 4 ? 0 : 4;
-                        break;
-
             case 4:     // ROW 5: SEQ
-                        pressedRow = pressedRow == 5 ? 0 : 5;
+                        pressedRow = pressedRow == index+1 ? 0 : index+1;
                         break;
 
             //
@@ -115,12 +144,14 @@ void buttPressedAymid(int pin, int state)
             //
 
             case 11:    // CHANNEL: a
-                        break;
-
             case 2:     // CHANNEL: b
-                        break;
-
             case 6:     // CHANNEL: c
+
+                        switch (pressedRow) {
+                            case 1: updateTriStateButtonAymid(chip, index, all, aymidState.overrideTone);   break;
+                            case 3: updateTriStateButtonAymid(chip, index, all, aymidState.overrideNoise);  break;
+                            case 4: updateTriStateButtonAymid(chip, index, all, aymidState.overrideEnv);    break;
+                        }   
                         break;
 
             case 9:     // CHANNEL: d

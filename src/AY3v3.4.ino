@@ -10,7 +10,7 @@
     twisted electrons  (c) 2025
 ***********************************/
 
-enum class InitState { ALL, TONE, NOISE, MIXER, AMP, ENVELOPE };
+enum class InitState { ALL, TONE, NOISE, MIXER, AMP, PITCH, ENVELOPE, ENVTYPE };
 enum class ChannelState { AY3FILE, ABC, ACB, BAC, BCA, CAB, CBA };
 enum class AmpState { AY3FILE, M, L3, L2, L1, L0 };
 enum class EnvTypeState { AY3FILE, CONT, ATT, ALT, HOLD };
@@ -34,6 +34,7 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define SAMPLE_CYCLE    30          // sampling of pitches & glides
 #define PROCESS_CYCLE   6           // processing of midi clock, arp, lfo, calculate pitches
 #define SEQ_CYCLES      190         // processing of sequencer steps by internal clock, mixer (no midi)
+#define SELECT_DELAY    7           // prevents sound & gui interferences for AYMID
 
 
 // config
@@ -80,6 +81,9 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define VOICE_ENABLE    1
 #define VOICE_VOLUME    2
 #define VOICE_TUNING    3
+
+#define TGL_AY3FILE_OFF 1
+#define TGL_AY3FILE_ON  2
 
 
 // debug
@@ -143,6 +147,7 @@ uint16_t displaycc      = 20000;
 uint16_t samplecc       = 0;
 uint16_t arpcc          = 0;
 uint16_t processcc      = 0;
+byte selectedcc         = 0;
 byte seqcc              = 0;
 unsigned long resetcc;
 uint16_t memPointer;
@@ -154,6 +159,7 @@ int lastStateCLK        = -1;       // init -1 to ignore first poll
 // buttons
 byte butt[20];
 byte buttLast[20];
+byte selectRow          = 0;
 byte pressedRow         = 0;
 byte pressedCol         = 9;
 byte voiceMode          = VOICE_ENABLE;
@@ -560,7 +566,7 @@ void loop()
     // READ
     //
 
-    if (!writeConfig) readMidi();
+    if (!writeConfig && !selectRow) readMidi();
 
 #endif
 }

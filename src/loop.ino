@@ -18,6 +18,19 @@ void tick()
 void tickStateMachine()
 {
     //
+    // ASSIGN pressedRow (delayed / safety)
+    //
+
+    if (selectedcc == SELECT_DELAY) {
+        selectedcc = 0;
+        pressedRow = selectRow;
+        selectRow = 0;
+    }
+
+    if (selectRow) selectedcc++;
+
+
+    //
     // Held buttons
     //
 

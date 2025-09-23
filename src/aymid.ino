@@ -226,9 +226,68 @@ void setAY3Register(byte chip, byte address, byte data) {
     }
 }
 
-void updateLastAY3Values(int chip) {
+void updateLastAY3Values(int chip, byte voice, InitState init) {
 
-    for (size_t reg = 0; reg < AY3_REGISTERS; reg++) {
+    for (size_t reg = 0; reg < sizeof(aymidState.lastAY3values) / (sizeof(*aymidState.lastAY3values)); reg++) {
+
+        // cast size_t to byte
+        byte r = static_cast<byte>(reg);
+        byte voiceBase = voice * 2;
+
+        // If specific register not covered by requested init, skip it
+        switch (init) {
+
+            case InitState::ALL:
+                // default
+                break;
+
+            case InitState::TONE:
+                if (r != voiceBase + AY3_TONEA_PITCH_LO && r != voiceBase + AY3_TONEA_PITCH_HI &&
+                    r != AY3_AMPA + voice &&
+                    r != AY3_MIXER) {
+                    continue;
+                }
+                break;
+
+            case InitState::NOISE:
+                if (r != AY3_NOISE && r != AY3_MIXER) {
+                    continue;
+                }
+                break;
+
+            case InitState::MIXER:
+                if (r != AY3_MIXER) {
+                    continue;
+                }
+                break;
+
+            case InitState::AMP:
+                if (r != AY3_AMPA && r != AY3_AMPB && r != AY3_AMPC) {
+                    continue;
+                }
+                break;
+
+            case InitState::ENVELOPE:
+                if (r != AY3_ENVELOPE_LO && r != AY3_ENVELOPE_HI &&
+                    r != AY3_ENVTYPE &&
+                    r != AY3_MIXER) {
+                    continue;
+                }
+                break;
+
+            case InitState::PITCH:
+                if (r != voiceBase + AY3_TONEA_PITCH_LO && r != voiceBase + AY3_TONEA_PITCH_HI) {
+                    continue;
+                }
+                break;
+
+
+            case InitState::ENVTYPE:
+                if (r != AY3_ENVTYPE) {
+                    continue;
+                }
+                break;
+        }
 
         if (chip <= 0)              setAY3Register(0, reg, aymidState.lastAY3values[reg]); // 1st chip
         if (chip < 0 || chip == 1)  setAY3Register(1, reg, aymidState.lastAY3values[reg]); // 2nd chip
@@ -236,17 +295,30 @@ void updateLastAY3Values(int chip) {
 }
 
 /*
- * Restore the most important/seldom changed registers, used when
- * pressing RESET briefly
+ * Restore the most important/seldom changed registers
  */
 void aymidRestore(int chip) {
     aymidInit(chip);
-    updateLastAY3Values(chip);
+    updateLastAY3Values(chip, 0, InitState::ALL);
 
     //showFilterModeLEDs(aymidState.lastAY3values[SID_FILTER_MODE_VOLUME]);
     //showFilterResoLEDs(aymidState.lastAY3values[SID_FILTER_RESONANCE_ROUTING]);
     //showFilterRouteLEDs(aymidState.lastAY3values[SID_FILTER_RESONANCE_ROUTING]);
     //showFilterCutoffLEDs(aymidState.lastAY3values[SID_FILTER_CUTOFF_HI]);
+}
+
+
+/*
+ * Restore the most important/seldom changed registers, used when
+ * pressing d e f button withín selected row
+ */
+void aymidRestoreVoice(int chip, byte voice, InitState init) {
+    aymidInitVoice(chip, voice, init);
+
+    // update voice related values
+    if (init == InitState::ALL) return;
+
+    updateLastAY3Values(chip, voice, init);
 }
 
 void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], byte chip) {
@@ -328,9 +400,9 @@ bool runAmp(byte chip, byte voice, byte* data) {
 
     // Env
     if (aymidState.overrideEnv[chip][voice] == OverrideState::ON) {
-        *data &= ~( B00010000);
-    } else if (aymidState.overrideEnv[chip][voice] == OverrideState::OFF) {
         *data |=    B00010000;
+    } else if (aymidState.overrideEnv[chip][voice] == OverrideState::OFF) {
+        *data &= ~( B00010000);
     }
 
     return true;
@@ -408,6 +480,7 @@ void handleAymidFrameUpdate(const byte* buffer) {
         aymidState.enabled = true;
         initializeAY3s();
         aymidRestore(-1); // TODO
+        pressedRow = 1;
     }
 
     //
@@ -527,16 +600,16 @@ void visualizeAY3LEDs() {
 
         // GET AMP & ENV for A, B, C
         data = ay3Reg1Last[AY3_AMPA];
-        amp[0] = data & 0x07;
-        env[0] = data & 0x08;
+        amp[0] = data & 0x0F;
+        env[0] = data & 0x10;
 
         data = ay3Reg1Last[AY3_AMPB];
-        amp[1] = data & 0x07;
-        env[1] = data & 0x08;
+        amp[1] = data & 0x0F;
+        env[1] = data & 0x10;
 
         data = ay3Reg1Last[AY3_AMPC];
-        amp[2] = data & 0x07;
-        env[2] = data & 0x08;
+        amp[2] = data & 0x0F;
+        env[2] = data & 0x10;
 
         // GET MIXER
         data = ay3Reg1Last[AY3_MIXER];
@@ -582,6 +655,7 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
                 aymidState.enabled = true;
                 initializeAY3s();
                 aymidRestore(-1); // TODO
+                pressedRow = 1;
             }
 
             break;
@@ -592,6 +666,7 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
             aymidState.enabled = false;
             aymidState.incomingInd = false;
             aymidResetAY3Chip(-1);
+            pressedRow = 0;
             break;
 
         case 0x4f:
@@ -634,21 +709,36 @@ void aymidResetAY3Chip(int chip) {
     initializeAY3s();
 
     // clear cache
-    updateLastAY3Values(chip);
+    updateLastAY3Values(chip, 0, InitState::ALL);
 
     // clear display
     resetDisplay();
 }
 
 /*
- * update triState button [ON, OFF, AY3FILE]
+ * update triState button [AY3FILE, ON, OFF]
  */
-void updateTriStateButtonAymid(byte chip, byte index, bool all, OverrideState buttonState[][AY3VOICES]) {
-    if (buttonState[chip][index] == OverrideState::OFF) {
-        buttonState[chip][index] = OverrideState::AY3FILE;
+void updateTriStateButtonAymid(byte chip, byte index, bool all, OverrideState buttonState[][AY3VOICES], byte mode) {
+    // increment:
+    // buttonState[chip][index] = static_cast<OverrideState>(static_cast<int>(buttonState[chip][index]) + 1);
+
+    OverrideState toggleState;
+
+    if (mode == TGL_AY3FILE_ON) {
+
+        toggleState = OverrideState::ON;
+        if (buttonState[chip][index] == toggleState)
+            buttonState[chip][index] = OverrideState::AY3FILE;
+        else buttonState[chip][index] = toggleState;
+    
     } else {
-        buttonState[chip][index] = static_cast<OverrideState>(static_cast<int>(buttonState[chip][index]) + 1);
+
+        toggleState = OverrideState::OFF;
+        if (buttonState[chip][index] == toggleState)
+            buttonState[chip][index] = OverrideState::AY3FILE;
+        else buttonState[chip][index] = toggleState;
     }
+
     if (all) {
         // Copy from 0 to other chips
         for (byte i = 1; i < AY3CHIPS; i++) {

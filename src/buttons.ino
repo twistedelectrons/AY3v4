@@ -1,5 +1,18 @@
 void doButtons()
 {
+    // two conditions ensure that neither the register update 
+    // nor the selection of the selected row is disrupted, 
+    // as both use some of the same data lines. 
+    // selectRow ensures delayed and protected selection, 
+    // PORTB checking refers to LED SUPPRESSION, which is 
+    // initiated by timer before each register update.
+
+#if LEDSUPPRESSION
+    if (selectRow || PORTB == B11111111) return;
+#else
+    if (selectRow) return;
+#endif
+
     // PORTB reset (LED)
     PORTB = B11111111;
 
@@ -81,6 +94,9 @@ byte indexFromPin(int pin) {
         case 11:    return 0;
         case 2:     return 1;
         case 6:     return 2;
+        case 9:     return 3;
+        case 12:    return 4;
+        case 3:     return 5;
 
         // ROWS
         case 8:     return 0;
@@ -136,7 +152,8 @@ void buttPressedAymid(int pin, int state)
             case 10:    // ROW 3: NOISE
             case 7:     // ROW 4: ENV
             case 4:     // ROW 5: SEQ
-                        pressedRow = pressedRow == index+1 ? 0 : index+1;
+
+                        selectRow = index+1;
                         break;
 
             //
@@ -148,19 +165,20 @@ void buttPressedAymid(int pin, int state)
             case 6:     // CHANNEL: c
 
                         switch (pressedRow) {
-                            case 1: updateTriStateButtonAymid(chip, index, all, aymidState.overrideTone);   break;
-                            case 3: updateTriStateButtonAymid(chip, index, all, aymidState.overrideNoise);  break;
-                            case 4: updateTriStateButtonAymid(chip, index, all, aymidState.overrideEnv);    break;
+                            case 1: updateTriStateButtonAymid(chip, index, all, aymidState.overrideTone, TGL_AY3FILE_OFF);  break;
+                            case 3: updateTriStateButtonAymid(chip, index, all, aymidState.overrideNoise, TGL_AY3FILE_OFF); break;
+                            case 4: updateTriStateButtonAymid(chip, index, all, aymidState.overrideEnv, TGL_AY3FILE_OFF);   break;
                         }   
                         break;
 
             case 9:     // CHANNEL: d
-                        break;
-
             case 12:    // CHANNEL: e
-                        break;
-
             case 3:     // CHANNEL: f
+                        switch (pressedRow) {
+                            case 1: aymidRestoreVoice(all ? -1 : chip, index-3, InitState::TONE);       break;
+                            case 3: aymidRestoreVoice(all ? -1 : chip, index-3, InitState::NOISE);      break;
+                            case 4: aymidRestoreVoice(all ? -1 : chip, index-3, InitState::ENVELOPE);   break;
+                        }
                         break;
         }
 

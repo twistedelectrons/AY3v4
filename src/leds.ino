@@ -23,6 +23,8 @@ void ledTickAymid()
                 if (ledNumber == 6) { maskB = B11111110; maskC = B10000000; }
                 if (ledNumber == 8) { maskB = B11111011; maskC = B10000000; }
 
+                if (!flippedN && aymidState.preparedEnvType) maskB = B11111111;
+
                 PORTB = maskB;
                 PORTC = maskC;
                 miniDelay();

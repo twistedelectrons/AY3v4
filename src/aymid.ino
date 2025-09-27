@@ -71,7 +71,7 @@ struct aymidState_t {
     bool muteVoice[AY3CHIPS][AY3VOICES]; // includes tone, noise, envelope
 
     ChannelState overrideChannel[AY3CHIPS];
-    EnvTypeState overrideEnvType[AY3CHIPS];
+    byte overrideEnvType[AY3CHIPS];
 
     AmpState overrideAmp[AY3CHIPS][AY3VOICES];
     OverrideState overrideTone[AY3CHIPS][AY3VOICES];
@@ -109,6 +109,7 @@ struct aymidState_t {
     volatile byte slowTimer;
 
     bool incomingInd;
+    byte preparedEnvType;
 };
 
 aymidState_t aymidState;
@@ -144,7 +145,7 @@ void aymidInit(int chip) { // TODO
             aymidInitVoice(chip, i, InitState::ALL);
 
         aymidState.overrideChannel[chip] = ChannelState::AY3FILE;
-        aymidState.overrideEnvType[chip] = EnvTypeState::AY3FILE;
+        aymidState.overrideEnvType[chip] = 0;
 
         aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
         aymidState.adjustNoisePeriod[chip] = POT_VALUE_TO_AYMID_NOISE_PERIOD(POT_NOON);
@@ -165,6 +166,7 @@ void aymidInit(int chip) { // TODO
     aymidState.slowTimer = 0;
 
     aymidState.incomingInd = false;
+    aymidState.preparedEnvType = 0;
 }
 
 /*
@@ -315,9 +317,13 @@ void updateLastAY3Values(int chip, byte voice, InitState init) {
                 break;
         }
 
-        if (chip <= 0)              setAY3Register(0, reg, aymidState.lastAY3values[reg]); // 1st chip
-        if (chip < 0 || chip == 1)  setAY3Register(1, reg, aymidState.lastAY3values[reg]); // 2nd chip
+        sendImmediateAY3Value(chip, reg, aymidState.lastAY3values[reg]);
     }
+}
+
+void sendImmediateAY3Value(int chip, size_t reg, byte data) {
+    if (chip <= 0)              setAY3Register(0, reg, data); // 1st chip
+    if (chip < 0 || chip == 1)  setAY3Register(1, reg, data); // 2nd chip
 }
 
 /*
@@ -334,16 +340,19 @@ void aymidRestore(int chip) {
 }
 
 /*
- * Restore the most important/seldom changed registers, used when
- * pressing a b c button: affects voice
+ * Restore the most important/seldom changed registers: affects voice(s) (a b c)
  */
 void aymidRestoreVoice(int chip, int voice, InitState init) {
 
-    byte first = voice > -1 ? voice : 0;
-    byte last = voice > -1 ? voice : AY3VOICES - 1;
+    bool initEnvelope = init == InitState::ALL || init == InitState::ENVELOPE;
+
+    byte first  = voice > -1 ? voice : 0;
+    byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
     for (byte voice = first; voice <= last; voice++)
         aymidInitVoice(chip, voice, init);
+
+    if (initEnvelope) aymidInitEnvelope(chip);
 
     updateLastAY3Values(chip, voice, init);
 }
@@ -358,8 +367,8 @@ void aymidOverrideVoice(int chip, byte voice, OverrideState buttonState[][AY3VOI
 
     OverrideState state = (mode == TGL_AY3FILE_ON) ? OverrideState::ON : OverrideState::OFF;
 
-    byte first = chip > -1 ? chip : 0;
-    byte last = chip > -1 ? chip : AY3CHIPS - 1;
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
 
     for (byte chip = first; chip <= last; chip++) {
         if (buttonState[chip][voice] == state || mode == RST_AY3FILE)
@@ -369,8 +378,15 @@ void aymidOverrideVoice(int chip, byte voice, OverrideState buttonState[][AY3VOI
 }
 
 void aymidInitEnvelope(int chip) {
-    aymidState.overrideEnvType[chip] = EnvTypeState::AY3FILE;
-    aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++) {
+
+        aymidState.overrideEnvType[chip] = 0;
+        aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
+    }
 }
 
 /*
@@ -378,13 +394,13 @@ void aymidInitEnvelope(int chip) {
  */
 void aymidInitState(int chip, int voice, InitState init) {
 
-    byte first = chip > -1 ? chip : 0;
-    byte last = chip > -1 ? chip : AY3CHIPS - 1;
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
 
     for (byte chip = first; chip <= last; chip++) {
 
-        byte first = voice > -1 ? voice : 0;
-        byte last = voice > -1 ? voice : AY3VOICES - 1;
+        byte first  = voice > -1 ? voice : 0;
+        byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
         for (byte voice = first; voice <= last; voice++)
             aymidInitVoice(chip, voice, init);
@@ -394,9 +410,10 @@ void aymidInitState(int chip, int voice, InitState init) {
 }
 
 /*
- * Toggle "remix with restore" or "unremix with mute", used when
+ * Toggle "remix to restore" or vice versa, used when
  * pressing shift (f) button within selected row: affects a b c state
  */
+
 bool aymidToggleState(  int chip, int voice, InitState init, 
                         OverrideState buttonState[][AY3VOICES], 
                         OverrideState buttonStateBuf[][AY3VOICES],
@@ -431,8 +448,8 @@ bool aymidToggleState(  int chip, int voice, InitState init,
  */
 void aymidOverride(int chip, int voice, OverrideState buttonState[][AY3VOICES], byte mode) {
 
-    byte first = voice > -1 ? voice : 0;
-    byte last = voice > -1 ? voice : AY3VOICES - 1;
+    byte first  = voice > -1 ? voice : 0;
+    byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
     for (byte voice = first; voice <= last; voice++)
         aymidOverrideVoice(chip, voice, buttonState, mode);
@@ -443,13 +460,13 @@ void aymidOverride(int chip, int voice, OverrideState buttonState[][AY3VOICES], 
  */
 bool aymidDetectRemix(int chip, int voice, OverrideState buttonState[][AY3VOICES]) {
 
-    byte first = chip > -1 ? chip : 0;
-    byte last = chip > -1 ? chip : AY3CHIPS - 1;
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
 
     for (byte chip = first; chip <= last; chip++) {
 
-        byte first = voice > -1 ? voice : 0;
-        byte last = voice > -1 ? voice : AY3VOICES - 1;
+        byte first  = voice > -1 ? voice : 0;
+        byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
         for (byte voice = first; voice <= last; voice++)
             if (buttonState[chip][voice] != OverrideState::AY3FILE)
@@ -466,13 +483,13 @@ void aymidCopyOverride( int chip, int voice,
                         OverrideState buttonState[][AY3VOICES],
                         OverrideState buttonStateCopy[][AY3VOICES]) {
 
-    byte first = chip > -1 ? chip : 0;
-    byte last = chip > -1 ? chip : AY3CHIPS - 1;
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
 
     for (byte chip = first; chip <= last; chip++) {
 
-        byte first = voice > -1 ? voice : 0;
-        byte last = voice > -1 ? voice : AY3VOICES - 1;
+        byte first  = voice > -1 ? voice : 0;
+        byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
         for (byte voice = first; voice <= last; voice++)
             buttonStateCopy[chip][voice] = buttonState[chip][voice];
@@ -492,7 +509,7 @@ void aymidRestoreNoises(int chip) { aymidInitState(chip, -1, InitState::NOISE); 
 void aymidRestoreEnvs(int chip) {   aymidInitState(chip, -1, InitState::ENVELOPE); }
 
 /*
- * Toggle "remix with restore" or "unremix with mute", used when
+ * Toggle "remix to restore" or vice versa, used when
  * pressing shift (f) button within selected row: affects a b c
  */
 void aymidToggleTones(int chip, bool asXOR) {
@@ -505,6 +522,10 @@ void aymidToggleEnvs(int chip, bool asXOR) {
     aymidToggleState(chip, -1, InitState::ENVELOPE, aymidState.overrideEnv, aymidState.overrideEnvBuf, asXOR);
 }
 
+/*
+ * Toggle "remix to restore" and "restore to mute", used when
+ * pressing ctrl (seq) button within selected col: affects a, b or c
+ */
 void aymidToggleVoice(int chip, byte voice, bool asXOR) {
     bool isRemixedTone, isRemixedNoise, isRemixedEnv;
 
@@ -515,6 +536,75 @@ void aymidToggleVoice(int chip, byte voice, bool asXOR) {
     // detected any remix state should reset (toggles complete restore/mute)
     if (!asXOR && (isRemixedTone || isRemixedNoise || isRemixedEnv))
         aymidRestoreVoice(chip, voice, InitState::ALL);
+    else updateLastAY3Values(chip, voice, InitState::ALL);
+}
+
+/*
+ * Restore envType
+ */
+void aymidRestoreEnvType(int chip) {
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++)
+        aymidState.overrideEnvType[chip] = 0;
+
+    updateLastAY3Values(chip, 0, InitState::ENVTYPE);
+}
+
+/*
+ * Override envType up/down dir
+ */
+void aymidOverrideEnvType(int chip, int8_t dir, bool prepare) {
+
+    // chip or first of both
+    byte chipIdx = chip == -1 ? 0 : chip;
+
+    byte envType = prepare && aymidState.preparedEnvType
+                            ? aymidState.preparedEnvType
+                            : aymidState.overrideEnvType[chipIdx];
+
+    if (!envType) envType = oldNumber;
+
+    envType += dir;
+
+    if      (envType < 1) envType = 1;
+    else if (envType > 8) envType = 8;
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++) {
+
+        if (prepare) aymidState.preparedEnvType = envType;
+        else {
+            aymidState.overrideEnvType[chip] = envType;
+            sendImmediateEnvType(chip);
+        }
+    }
+}
+
+void sendImmediateEnvType(int chip) {
+
+    if (aymidState.preparedEnvType) {
+        aymidState.overrideEnvType[0] = aymidState.preparedEnvType;
+        aymidState.overrideEnvType[1] = aymidState.preparedEnvType;
+        aymidState.preparedEnvType = 0;
+    }
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++) {
+
+        // fill data
+        byte data;
+        runEnvType(chip, 0, &data);
+
+        // send out data
+        sendImmediateAY3Value(chip, AY3_ENVTYPE, data);
+    }
 }
 
 
@@ -615,7 +705,20 @@ bool runEnvelopeHI(byte chip, byte, byte*) {
     return true;
 }
 
-bool runEnvType(byte chip, byte, byte*) {
+bool runEnvType(byte chip, byte voice, byte* data) {
+
+    // EnvShapes
+    switch (aymidState.overrideEnvType[chip]) {
+        case 1: *data = B00000000; break;
+        case 2: *data = B00000100; break;
+        case 3: *data = B00001000; break;
+        case 4: *data = B00001010; break;
+        case 5: *data = B00001011; break;
+        case 6: *data = B00001100; break;
+        case 7: *data = B00001101; break;
+        case 8: *data = B00001110; break;
+        default: break;
+    }
 
     return true;
 }
@@ -828,17 +931,25 @@ void visualizeAY3LEDs() {
             else                clrPoint(4, channel);
         }
 
-        // GET ENV SHAPE
-        data = ay3Reg1Last[AY3_ENVTYPE];
+        if (aymidState.preparedEnvType) ledNumber = aymidState.preparedEnvType;
+        else {
 
-        if (data == B0000) ledNumber = 1;
-        if (data == B0100) ledNumber = 2;
-        if (data == B1000) ledNumber = 3;
-        if (data == B1010) ledNumber = 4;
-        if (data == B1011) ledNumber = 5;
-        if (data == B1100) ledNumber = 6;
-        if (data == B1101) ledNumber = 7;
-        if (data == B1110) ledNumber = 8;
+            // GET ENV SHAPE
+            data = ay3Reg1Last[AY3_ENVTYPE];
+
+            if (data == B0000) ledNumber = 1;
+            if (data == B0100) ledNumber = 2;
+            if (data == B1000) ledNumber = 3;
+            if (data == B1010) ledNumber = 4;
+            if (data == B1011) ledNumber = 5;
+            if (data == B1100) ledNumber = 6;
+            if (data == B1101) ledNumber = 7;
+            if (data == B1110) ledNumber = 8;
+        }
+
+        // cache previous envtype
+        if (aymidState.overrideEnvType[0] == 0)
+            oldNumber = ledNumber;
     }
 }
 

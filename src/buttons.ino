@@ -128,7 +128,10 @@ void buttPressedAymid(int pin, int state)
             // ENCODER SWITCH
             //
 
-            case 1:     aymidState.isEncMode = true;
+            case 1:     if (aymidState.preparedEnvType) sendImmediateEnvType(chip);
+                        else                            aymidRestoreEnvType(chip);
+
+                        aymidState.isEncMode = true;
                         break;
 
             //

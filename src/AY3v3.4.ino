@@ -13,7 +13,6 @@
 enum class InitState { ALL, TONE, NOISE, MIXER, AMP, PITCH, ENVELOPE, ENVTYPE };
 enum class ChannelState { AY3FILE, ABC, ACB, BAC, BCA, CAB, CBA };
 enum class AmpState { AY3FILE, M, L3, L2, L1, L0 };
-enum class EnvTypeState { AY3FILE, CONT, ATT, ALT, HOLD };
 enum class OverrideState { AY3FILE, ON, OFF };
 enum class PitchType { TONE, NOISE, ENVELOPE };
 

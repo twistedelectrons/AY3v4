@@ -33,10 +33,9 @@ void doEncoder()
 
 void encoderMovedAymid(int8_t dir)
 {
-    // STATE MACHINE
+    // ENCODER SHAPE
 
-    if (dir < 0) selectRow = pressedRow < 5 ? pressedRow + 1 : 1;
-    if (dir > 0) selectRow = pressedRow > 1 ? pressedRow - 1 : 5;
+    if (dir) aymidOverrideEnvType(-1, dir, true);
 }
 
 void encoderMoved(int8_t dir)

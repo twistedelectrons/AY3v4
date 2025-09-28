@@ -85,6 +85,7 @@ struct aymidState_t {
     int adjustOctave[AY3CHIPS][AY3VOICES];
     int adjustFine[AY3CHIPS][AY3VOICES];
 
+    int adjustOctaveEnv[AY3CHIPS];
     int adjustEnvPeriod[AY3CHIPS];
     int adjustNoisePeriod[AY3CHIPS];
 
@@ -147,6 +148,7 @@ void aymidInit(int chip) { // TODO
         aymidState.overrideChannel[chip] = ChannelState::AY3FILE;
         aymidState.overrideEnvType[chip] = 0;
 
+        aymidState.adjustOctaveEnv[chip] = 0;
         aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
         aymidState.adjustNoisePeriod[chip] = POT_VALUE_TO_AYMID_NOISE_PERIOD(POT_NOON);
 
@@ -384,6 +386,7 @@ void aymidInitEnvelope(int chip) {
 
     for (byte chip = first; chip <= last; chip++) {
 
+        aymidState.adjustOctaveEnv[chip] = 0;
         aymidState.overrideEnvType[chip] = 0;
         aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
     }
@@ -608,36 +611,66 @@ void sendImmediateEnvType(int chip) {
 }
 
 
+void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte dataBytes[], byte chip) {
+    if (pitchUpdateEnvelope) {
+
+        // Current original pitch
+        long pitch = (  aymidState.lastAY3values[AY3_ENVELOPE_HI] << 8) +
+                        aymidState.lastAY3values[AY3_ENVELOPE_LO];
+
+        // Calculate fine tune, about +/- 53 cents, range -80 to 28 cents to adjust
+        // for C64 PAL vs Therapchip clock differences. // TODO....
+        //int fine = aymidState.isCleanMode ? FINETUNE_0_CENTS : aymidState.adjustFine[chip][i];
+        //pitch = (pitch * fine) >> 10;
+
+        // Change octave if not a pure noise playing
+        if (!aymidState.isCleanMode) {
+
+            // Calculate octave switch (-2, -1, 0, +1, +2)
+            if      (aymidState.adjustOctaveEnv[chip] > 0)  pitch <<=   aymidState.adjustOctaveEnv[chip];
+            else if (aymidState.adjustOctaveEnv[chip] < 0)  pitch >>= (-aymidState.adjustOctaveEnv[chip]);
+        }
+
+        // Scale down to even octave if pitch is higher than possible
+        while (pitch > 65535) pitch >>= 1;
+
+        // Store in AYMID structure (2 bytes per voice)
+        dataBytes[AY3_ENVELOPE_LO] = pitch & 0xff;
+        dataBytes[AY3_ENVELOPE_HI] = (pitch >> 8) & 0xff;
+
+        // Set mask bits accordingly per voice
+        maskBytes[1] |= 0x30;
+    }
+}
+
+
 void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], byte chip) {
     for (byte i = 0; i < AY3VOICES; i++) {
         if (pitchUpdate[i]) {
 
             // Current original pitch
-            long pitch = (aymidState.lastAY3values[AY3_TONEA_PITCH_HI + 2 * i] << 8) +
-                         aymidState.lastAY3values[AY3_TONEA_PITCH_LO + 2 * i];
+            long pitch = (  aymidState.lastAY3values[AY3_TONEA_PITCH_HI + 2 * i] << 8) +
+                            aymidState.lastAY3values[AY3_TONEA_PITCH_LO + 2 * i];
 
-/* TODO:    // THERAPSID CODE, which can be used as a guide for AY3 fine-tuning
             // Calculate fine tune, about +/- 53 cents, range -80 to 28 cents to adjust
             // for C64 PAL vs Therapchip clock differences. // TODO....
-            int fine = aymidState.isCleanMode ? FINETUNE_0_CENTS : aymidState.adjustFine[chip][i];
-            pitch = (pitch * fine) >> 10;
+            //int fine = aymidState.isCleanMode ? FINETUNE_0_CENTS : aymidState.adjustFine[chip][i];
+            //pitch = (pitch * fine) >> 10;
 
             // Change octave if not a pure noise playing
-            if (!aymidState.isCleanMode && ((aymidState.lastAY3values[AY3_MIXER] & 0x3F) != (0x08 << i))) {
-                // Calculate octave switch (-1, 0, +1)
-                if (aymidState.adjustOctave[chip][i] > 0)
-                    pitch <<= aymidState.adjustOctave[chip][i];
-                else if (aymidState.adjustOctave[chip][i] < 0)
-                    pitch >>= (-aymidState.adjustOctave[chip][i]);
+            if (!aymidState.isCleanMode) {
+
+                // Calculate octave switch (-2, -1, 0, +1, +2)
+                if      (aymidState.adjustOctave[chip][i] > 0)  pitch <<=   aymidState.adjustOctave[chip][i];
+                else if (aymidState.adjustOctave[chip][i] < 0)  pitch >>= (-aymidState.adjustOctave[chip][i]);
             }
 
             // Scale down to even octave if pitch is higher than possible
             while (pitch > 4096) pitch >>= 1;
-*/
 
             // Store in AYMID structure (2 bytes per voice)
-            dataBytes[i * 2] = pitch & 0xff;
-            dataBytes[i * 2 + 1] = (pitch >> 8) & 0x0f;
+            dataBytes[AY3_TONEA_PITCH_LO + 2 * i] = pitch & 0xff;
+            dataBytes[AY3_TONEA_PITCH_HI + 2 * i] = (pitch >> 8) & 0x0f;
 
             // Set mask bits accordingly per voice
             switch (i) {
@@ -650,6 +683,11 @@ void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], by
 }
 
 bool runNoise(byte chip, byte, byte*) {
+
+    return true;
+}
+
+bool runEnvelope(byte chip, byte, byte*) {
 
     return true;
 }
@@ -691,16 +729,6 @@ bool runAmp(byte chip, byte voice, byte* data) {
     } else if (aymidState.overrideEnv[chip][voice] == OverrideState::OFF) {
         *data &= ~( B00010000);
     }
-
-    return true;
-}
-
-bool runEnvelopeLO(byte chip, byte, byte*) {
-
-    return true;
-}
-
-bool runEnvelopeHI(byte chip, byte, byte*) {
 
     return true;
 }
@@ -762,8 +790,7 @@ void handleAymidFrameUpdate(const byte* buffer) {
         {1, runAmp, false},                 // Amp B
         {2, runAmp, false},                 // Amp C
 
-        {0, runEnvelopeLO, false},          // Env LO
-        {0, runEnvelopeHI, false},          // Env HI
+        {0, NULL, true}, {0, NULL, true},   // Envelope Period
 
         {0, runEnvType, false},             // Env shape
     };
@@ -773,6 +800,7 @@ void handleAymidFrameUpdate(const byte* buffer) {
     byte data, field, chip;
 
     bool pitchUpdate[AY3VOICES];
+    bool pitchUpdateEnvelope;
 
     // enable if not running
     if (!aymidState.enabled) {
@@ -829,7 +857,10 @@ void handleAymidFrameUpdate(const byte* buffer) {
                         // No need to store pitch data as we're updating it
                         // from source later. Retune always needed due to
                         // AY3 clock differences
-                        pitchUpdate[regConf->voice] = true;
+
+                        if (reg < AY3_ENVELOPE_LO)  pitchUpdate[regConf->voice] = true;
+                        else                        pitchUpdateEnvelope = true;
+
                     } else if (regConf->runRegFunction) {
                         // The regular case, run a modification function and find
                         // if value should be kept. New structure per chip created.
@@ -855,8 +886,10 @@ void handleAymidFrameUpdate(const byte* buffer) {
     }
 
     // Recalculate pitches
-    for (chip = 0; chip < AY3CHIPS; chip++)
+    for (chip = 0; chip < AY3CHIPS; chip++) {
         aymidUpdatePitch(pitchUpdate, newMaskBytes[chip], newAY3Data[chip], chip);
+        aymidUpdateEnvelopePitch(pitchUpdateEnvelope, newMaskBytes[chip], newAY3Data[chip], chip);
+    }
 
     // Send all updated AY3 registers
     for (chip = 0; chip < AY3CHIPS; chip++) {

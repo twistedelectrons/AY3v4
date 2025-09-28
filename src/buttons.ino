@@ -86,7 +86,7 @@ void doButtons()
     if (btntickcc > 3) btntickcc = 0;
 }
 
-byte indexFromPin(int pin) {
+byte indexOfPin(int pin) {
     switch (pin) {
         default:
 
@@ -109,7 +109,7 @@ byte indexFromPin(int pin) {
 
 void buttPressedAymid(int pin, int state)
 {
-    byte index  = indexFromPin(pin);
+    byte index  = indexOfPin(pin);
     int chip    = -1; // default all
     int voice   = -1; // default all
 

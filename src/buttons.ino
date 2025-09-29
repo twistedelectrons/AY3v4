@@ -207,6 +207,9 @@ void buttPressedAymid(int pin, int state)
 
             case 4:     // ROW 5: SEQ
                         aymidState.isCtrlMode = false;
+
+                        // RESTORE FINETUNES
+                        aymidRestoreFinetunes(chip, voice);
                         break;
 
             //

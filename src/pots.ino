@@ -23,34 +23,52 @@ void potTickAymid()
 
         case 0:     // 1 POT - [ ENVELOPE ] - (LFO/ARP SPEED)
                     analogTemp = analogRead(A4);
-                    if ((analogTemp >> 2) > (potLast[0] + 1) || 
-                        (analogTemp >> 2) < (potLast[0] - 1)) {
+                    if ((analogTemp >> 2) > (potLast[pot] + 1) || 
+                        (analogTemp >> 2) < (potLast[pot] - 1)) {
 
-                        // FULL SCALED
+                        ///// FULL SCALED /////
+
+                        // FINE TUNE
+                        if (aymidState.isCtrlMode)
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidState.adjustFineEnv[chip] = POT_VALUE_TO_AYMID_FINETUNE_ENV(analogTemp);
+
+                        ///// CRUSHED SIZE /////
 
                         // scale down to 8bit
                         analogTemp >>= 2;
 
-                        potLast[0] = analogTemp;
+                        // OCTAVE
+                        if (!aymidState.isCtrlMode) {
+                            int8_t octave = getOctave(analogTemp);
 
-                        // CRUSHED SIZE
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidState.adjustOctaveEnv[chip] = octave;
+                        }
 
-                        int8_t octave = getOctave(analogTemp);
-
-                        for (byte chip = 0; chip < AY3CHIPS; chip++)
-                            aymidState.adjustOctaveEnv[chip] = octave;
-
+                        potLast[pot] = analogTemp;
                     }
                     break;
 
         case 1:     // 2 POT - [ NOISE ] - (LFO/ARP DEPTH)
-                    analogTemp = analogRead(A5) >> 2;
-                    if (analogTemp > (potLast[1] + 1) || 
-                        analogTemp < (potLast[1] - 1)) {
-                        potLast[1] = analogTemp;
+                    analogTemp = analogRead(A5) >> 5;
+                    if (analogTemp > (potLast[pot] + 1) || 
+                        analogTemp < (potLast[pot] - 1)) {
 
-                        
+                        if (aymidState.isCtrlMode) {
 
+                            // RESTORE
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidRestoreNoisePeriod(chip);
+
+                        } else {
+
+                            // FINE TUNE
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidState.adjustNoisePeriod[chip] = POT_VALUE_TO_AYMID_NOISE_PERIOD(analogTemp);
+                        }
+
+                        potLast[pot] = analogTemp;
                     }
                     break;
 
@@ -59,15 +77,31 @@ void potTickAymid()
         case 3:     // 5 POT - [ TONE B ] - (GLIDE)
         case 4:     // 4 POT - [ TONE A ] - (DETUNE)
 
-                    analogTemp = analogRead(apins[pot]) >> 2;
-                    if (analogTemp > (potLast[pot] + 1) || 
-                        analogTemp < (potLast[pot] - 1)) {
+                    analogTemp = analogRead(apins[pot]);
+                    if ((analogTemp >> 2) > (potLast[pot] + 1) || 
+                        (analogTemp >> 2) < (potLast[pot] - 1)) {
+
+                        ///// FULL SCALED /////
+
+                        // FINE TUNE
+                        if (aymidState.isCtrlMode)
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidState.adjustFine[chip][voice] = POT_VALUE_TO_AYMID_FINETUNE(analogTemp);
+
+                        ///// CRUSHED SIZE /////
+
+                        // scale down to 8bit
+                        analogTemp >>= 2;
+
+                        // OCTAVE
+                        if (!aymidState.isCtrlMode) {
+                            int8_t octave = getOctave(analogTemp);
+
+                            for (byte chip = 0; chip < AY3CHIPS; chip++)
+                                aymidState.adjustOctave[chip][voice] = octave;
+                        }
+
                         potLast[pot] = analogTemp;
-
-                        int8_t octave = getOctave(analogTemp);
-
-                        for (byte chip = 0; chip < AY3CHIPS; chip++)
-                            aymidState.adjustOctave[chip][voice] = octave;
                     }
                     break;
     }

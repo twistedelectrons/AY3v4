@@ -14,13 +14,11 @@
 //
 //
 
-#define POT_VALUE_TO_AYMID_ENV_PERIOD(x) (x << 6)
-#define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (x)
-#define POT_VALUE_TO_AYMID_FINETUNE(x) ((value >> 4) + 978) // TODO!:
-// Finetune is multiplication value to be divided by 1024. This means +/-53
-// cents but from center position -26 (to fix PAL C64 vs 1MHz clock)
-// Thereby range = -80/+28. (i.e from 978/1024 to 1042/1024)
+#define POT_VALUE_TO_AYMID_FINETUNE(x) (x >> 1)
+#define POT_VALUE_TO_AYMID_FINETUNE_ENV(x) (x << 1)
+#define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (31 - x)
 
+#define NOISE_DEFAULT 16
 
 // AY_EMUL stereo separation (0..255) to REG (0..15) by >> 4:
 //
@@ -86,8 +84,8 @@ struct aymidState_t {
     int adjustFine[AY3CHIPS][AY3VOICES];
 
     int adjustOctaveEnv[AY3CHIPS];
-    int adjustEnvPeriod[AY3CHIPS];
-    int adjustNoisePeriod[AY3CHIPS];
+    int adjustFineEnv[AY3CHIPS];
+    byte adjustNoisePeriod[AY3CHIPS];
 
     bool isRemixed[AY3CHIPS];
 
@@ -130,9 +128,46 @@ aymidState_t aymidState;
 #define AY3_ENVELOPE_HI     0x0C
 #define AY3_ENVTYPE         0x0D
 
-#define FINETUNE_0_CENTS 31 + 978 // corresponds to -26 cents, to simulate PAL C64 on TS 1MHz // TODO....
-
 #define POT_NOON 512
+
+// Calculate finetune steps by semitone
+// To get from one semitone to the next, you have to add a twelfth of an octave 
+// to it and therefore multiply its frequency by 2^(1 ⁄ 12) = 12√2 ≈ 1.05946.
+// https://mint-zirkel.de/2023/10/10/musik-papier-und-die-zwoelfte-dimension/
+
+long calculateFinetune(long pitch, int value, int noonValue) {
+    if (value != noonValue) {
+
+        long clock;
+        switch (clockType) {
+            
+            case CLOCK_LOW:     // PWM 500Khz
+                                clock = 500000;
+                                break;
+
+            case CLOCK_ZX:      // PWM 1.777Mhz for rev.B, otherwise use default
+                                if (boardRevision > BOARD_REVA) {
+                                    clock = 1777777;
+                                    break;
+                                }
+
+            case CLOCK_ATARI:   // PWM 2Mhz
+            default:            clock = 2000000;
+                                break;
+
+            case CLOCK_ZXEXT:   // EXT 1.7734Mhz
+                                clock = 1773400;
+                                break;
+        }
+
+        long freq   = clock / (16 * pitch);
+        float semi = 1.05946 * (noonValue - value);
+        pitch = clock / (16 * (freq - semi));
+    }
+
+    return pitch;
+}
+
 
 /* */
 void aymidInit(int chip) { // TODO
@@ -149,8 +184,9 @@ void aymidInit(int chip) { // TODO
         aymidState.overrideEnvType[chip] = 0;
 
         aymidState.adjustOctaveEnv[chip] = 0;
-        aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
-        aymidState.adjustNoisePeriod[chip] = POT_VALUE_TO_AYMID_NOISE_PERIOD(POT_NOON);
+        aymidState.adjustFineEnv[chip] = POT_VALUE_TO_AYMID_FINETUNE_ENV(POT_NOON);
+
+        aymidState.adjustNoisePeriod[chip] = NOISE_DEFAULT;
 
         aymidState.isRemixed[chip] = false;
         //dotSet(chip, false); // TODO...GUI update
@@ -181,7 +217,7 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
 
     for (byte chip = first; chip <= last; chip++) {
 
-        bool initAll        = init == InitState::ALL;
+        bool initAll        = init == InitState::ALL || init == InitState::ALLSTATES;
         bool initTone       = init == InitState::ALL || init == InitState::TONE;
         bool initNoise      = init == InitState::ALL || init == InitState::NOISE;
         bool initEnvelope   = init == InitState::ALL || init == InitState::ENVELOPE;
@@ -191,7 +227,7 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
             aymidState.muteVoice[chip][voice] = false;
             aymidState.overrideTone[chip][voice] = OverrideState::AY3FILE;
             aymidState.adjustOctave[chip][voice] = 0;
-            aymidState.adjustFine[chip][voice] = FINETUNE_0_CENTS;
+            aymidState.adjustFine[chip][voice] = POT_VALUE_TO_AYMID_FINETUNE(POT_NOON);
         }
 
         if (initNoise)
@@ -317,6 +353,13 @@ void updateLastAY3Values(int chip, byte voice, InitState init) {
                     continue;
                 }
                 break;
+
+            case InitState::ALLSTATES:
+                if (r != AY3_AMPA && r != AY3_AMPB && r != AY3_AMPC &&
+                    r != AY3_MIXER) {
+                    continue;
+                }
+                break;
         }
 
         sendImmediateAY3Value(chip, reg, aymidState.lastAY3values[reg]);
@@ -346,15 +389,16 @@ void aymidRestore(int chip) {
  */
 void aymidRestoreVoice(int chip, int voice, InitState init) {
 
-    bool initEnvelope = init == InitState::ALL || init == InitState::ENVELOPE;
-
     byte first  = voice > -1 ? voice : 0;
     byte last   = voice > -1 ? voice : AY3VOICES - 1;
 
     for (byte voice = first; voice <= last; voice++)
         aymidInitVoice(chip, voice, init);
 
-    if (initEnvelope) aymidInitEnvelope(chip);
+    if (init == InitState::ALL) {
+        aymidRestoreEnvelope(chip);
+        aymidRestoreNoisePeriod(chip);
+    }
 
     updateLastAY3Values(chip, voice, init);
 }
@@ -379,17 +423,27 @@ void aymidOverrideVoice(int chip, byte voice, OverrideState buttonState[][AY3VOI
     }
 }
 
-void aymidInitEnvelope(int chip) {
+void aymidRestoreEnvelope(int chip) {
 
     byte first  = chip > -1 ? chip : 0;
     byte last   = chip > -1 ? chip : AY3CHIPS - 1;
 
     for (byte chip = first; chip <= last; chip++) {
 
-        aymidState.adjustOctaveEnv[chip] = 0;
         aymidState.overrideEnvType[chip] = 0;
-        aymidState.adjustEnvPeriod[chip] = POT_VALUE_TO_AYMID_ENV_PERIOD(POT_NOON);
+
+        aymidState.adjustOctaveEnv[chip] = 0;
+        aymidState.adjustFineEnv[chip] = POT_VALUE_TO_AYMID_FINETUNE_ENV(POT_NOON);
     }
+}
+
+void aymidRestoreNoisePeriod(int chip) {
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++)
+        aymidState.adjustNoisePeriod[chip] = NOISE_DEFAULT;
 }
 
 /*
@@ -407,8 +461,6 @@ void aymidInitState(int chip, int voice, InitState init) {
 
         for (byte voice = first; voice <= last; voice++)
             aymidInitVoice(chip, voice, init);
-
-        if (init == InitState::ENVELOPE) aymidInitEnvelope(chip);
     }
 }
 
@@ -538,8 +590,8 @@ void aymidToggleVoice(int chip, byte voice, bool asXOR) {
 
     // detected any remix state should reset (toggles complete restore/mute)
     if (!asXOR && (isRemixedTone || isRemixedNoise || isRemixedEnv))
-        aymidRestoreVoice(chip, voice, InitState::ALL);
-    else updateLastAY3Values(chip, voice, InitState::ALL);
+        aymidRestoreVoice(chip, voice, InitState::ALLSTATES);
+    else updateLastAY3Values(chip, voice, InitState::ALLSTATES);
 }
 
 /*
@@ -610,6 +662,22 @@ void sendImmediateEnvType(int chip) {
     }
 }
 
+void aymidRestoreFinetunes(int chip, int voice) {
+
+    byte first  = chip > -1 ? chip : 0;
+    byte last   = chip > -1 ? chip : AY3CHIPS - 1;
+
+    for (byte chip = first; chip <= last; chip++) {
+
+        byte first  = voice > -1 ? voice : 0;
+        byte last   = voice > -1 ? voice : AY3VOICES - 1;
+
+        for (byte voice = first; voice <= last; voice++)
+            aymidState.adjustFine[chip][voice] = POT_VALUE_TO_AYMID_FINETUNE(POT_NOON);
+
+        aymidState.adjustFineEnv[chip] = POT_VALUE_TO_AYMID_FINETUNE_ENV(POT_NOON);
+    }
+}
 
 void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte dataBytes[], byte chip) {
     if (pitchUpdateEnvelope) {
@@ -618,10 +686,9 @@ void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte d
         long pitch = (  aymidState.lastAY3values[AY3_ENVELOPE_HI] << 8) +
                         aymidState.lastAY3values[AY3_ENVELOPE_LO];
 
-        // Calculate fine tune, about +/- 53 cents, range -80 to 28 cents to adjust
-        // for C64 PAL vs Therapchip clock differences. // TODO....
-        //int fine = aymidState.isCleanMode ? FINETUNE_0_CENTS : aymidState.adjustFine[chip][i];
-        //pitch = (pitch * fine) >> 10;
+        // calculate finetune
+        if (!aymidState.isCleanMode) 
+            pitch = calculateFinetune(pitch, aymidState.adjustFineEnv[chip], POT_VALUE_TO_AYMID_FINETUNE_ENV(POT_NOON));
 
         // Change octave if not a pure noise playing
         if (!aymidState.isCleanMode) {
@@ -643,7 +710,6 @@ void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte d
     }
 }
 
-
 void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], byte chip) {
     for (byte i = 0; i < AY3VOICES; i++) {
         if (pitchUpdate[i]) {
@@ -652,10 +718,9 @@ void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], by
             long pitch = (  aymidState.lastAY3values[AY3_TONEA_PITCH_HI + 2 * i] << 8) +
                             aymidState.lastAY3values[AY3_TONEA_PITCH_LO + 2 * i];
 
-            // Calculate fine tune, about +/- 53 cents, range -80 to 28 cents to adjust
-            // for C64 PAL vs Therapchip clock differences. // TODO....
-            //int fine = aymidState.isCleanMode ? FINETUNE_0_CENTS : aymidState.adjustFine[chip][i];
-            //pitch = (pitch * fine) >> 10;
+            // calculate finetune
+            if (!aymidState.isCleanMode) 
+                pitch = calculateFinetune(pitch, aymidState.adjustFine[chip][i], POT_VALUE_TO_AYMID_FINETUNE(POT_NOON));
 
             // Change octave if not a pure noise playing
             if (!aymidState.isCleanMode) {
@@ -682,12 +747,11 @@ void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], by
     }
 }
 
-bool runNoise(byte chip, byte, byte*) {
+bool runNoise(byte chip, byte voice, byte* data) {
 
-    return true;
-}
-
-bool runEnvelope(byte chip, byte, byte*) {
+    // set period directly or restore by NOISE_DEFAULT
+    if (aymidState.adjustNoisePeriod[chip] != NOISE_DEFAULT)
+        *data = aymidState.adjustNoisePeriod[chip];
 
     return true;
 }

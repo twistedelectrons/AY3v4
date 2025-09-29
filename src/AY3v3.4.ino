@@ -10,7 +10,7 @@
     twisted electrons  (c) 2025
 ***********************************/
 
-enum class InitState { ALL, TONE, NOISE, MIXER, AMP, PITCH, ENVELOPE, ENVTYPE };
+enum class InitState { ALL, TONE, NOISE, MIXER, AMP, PITCH, ENVELOPE, ENVTYPE, ALLSTATES };
 enum class ChannelState { AY3FILE, ABC, ACB, BAC, BCA, CAB, CBA };
 enum class AmpState { AY3FILE, M, L3, L2, L1, L0 };
 enum class OverrideState { AY3FILE, ON, OFF };

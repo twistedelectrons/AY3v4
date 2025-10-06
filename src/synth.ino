@@ -65,6 +65,12 @@ void updateEnvSpeed()
     else if (envPeriodType == 1) setEnvSpeedLUT(lastEnvSpeedLUT);
 }
 
+void stopEnvSpeed()
+{
+    AY3( 13, B0100);
+    AY32(13, B0100);
+}
+
 void triggerEnv()
 {
     AY3( 13, envShape[0]);

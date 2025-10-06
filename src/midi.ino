@@ -297,11 +297,7 @@ void receivedNote(byte channel, byte note, byte vel)
 
                     base[1] = base[2] = base[3] = base[4] = base[5] = base[6] = 0;
 
-                    AY3(11, 255);
-                    AY3(12, 255);
-
-                    AY32(11, 255);
-                    AY32(12, 255);
+                    stopEnvSpeed();
 
                     bitWrite(data7A, 0, 1);
                     bitWrite(data7A, 1, 1);

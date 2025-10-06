@@ -167,6 +167,6 @@ void load()
     // noise mode
     noiseMode = readey();
 
-    // update envelope freq
-    updateEnvSpeed();
+    // stop envelope freq
+    stopEnvSpeed();
 }

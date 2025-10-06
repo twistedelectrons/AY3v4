@@ -99,7 +99,6 @@ struct aymidState_t {
     bool isShiftMode;
     bool isAltMode;
     bool isCtrlMode;
-    bool isEncMode;
 
     bool isChipSelectionMode; // unused
 
@@ -1245,9 +1244,7 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
 
         case 0x4d:
             // Stop playback
-            // reset registers raw, so remix state is kept
-            aymidState.enabled = false;
-            aymidState.incomingInd = false;
+            aymidState.incomingInd = true; // OFF
             aymidResetAY3Chip(-1);
             pressedRow = 0;
             break;
@@ -1261,6 +1258,9 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
     
             // Must be at least one 3 header (ID), 2 mask bytes and 2 msb bytes and 1 data byte, end flag [8]
             if (size < 9) break;
+
+            // reject rejection
+            encPressed = false;
 
             // handle with skipped header
             handleAymidFrameUpdate(&buffer[3]);

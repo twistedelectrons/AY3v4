@@ -35,6 +35,7 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define PROCESS_CYCLE   6           // processing of midi clock, arp, lfo, calculate pitches
 #define SEQ_CYCLES      190         // processing of sequencer steps by internal clock, mixer (no midi)
 #define SELECT_DELAY    7           // prevents sound & gui interferences for AYMID
+#define INIT_LOAD_CYCLE 17000       // prevents sound errors by a loading delay of 3000 cycles (20000-x)
 
 
 // config
@@ -118,7 +119,7 @@ int8_t selectedChip     = 0;        // -1 both, 0 chip1, 1 chip2
 int8_t lastSingleChip   = 0;
 byte seqSetup           = 1;
 byte mode               = 1;
-bool initial            = true;
+byte loadRequest        = true;
 
 // ay3
 byte ay3Reg1[14];
@@ -139,12 +140,12 @@ byte pottickcc          = 0;
 byte seqtickcc          = 0;
 byte analogcc           = 0;
 byte clockcc            = 0;
-byte countDown          = 9;
+byte countDown          = 20;
 bool inputToggle        = false;
 uint16_t maincc         = 0;
-uint16_t savecc         = 0;
+uint16_t encodercc      = 0;
 uint16_t seqsetupcc     = 0;
-uint16_t displaycc      = 20000;
+uint16_t displaycc      = INIT_LOAD_CYCLE;
 uint16_t samplecc       = 0;
 uint16_t arpcc          = 0;
 uint16_t processcc      = 0;
@@ -159,13 +160,13 @@ int lastStateCLK        = -1;       // init -1 to ignore first poll
 
 // buttons
 byte butt[20];
-byte buttLast[20];
+byte buttLast[20]       = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}; // released state!
 byte selectRow          = 0;
 byte pressedRow         = 0;
 byte pressedCol         = 9;
 byte voiceMode          = VOICE_ENABLE;
 bool seqPressed;
-bool savePressed;
+bool encPressed;
 bool voicePressed;
 
 // pots
@@ -422,8 +423,6 @@ void setup()
     if (!digitalRead(5)) // boot +noise btn
         factoryReset(); // reinit EEPROM with factory data
 #endif
-
-
 
     //
     // initiate hardware timer

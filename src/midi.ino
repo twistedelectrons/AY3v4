@@ -55,7 +55,7 @@ void handleProgramChange(int channel, int number1, int number2)
 
             // explicite load in none-default state
             // otherwise it's already handled by encoderMoved
-            if (pressedRow || seqSetup) load();
+            if (pressedRow || seqSetup) loadRequest = true;
         }
     }
 }

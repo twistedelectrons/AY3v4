@@ -41,22 +41,52 @@ void tickStateMachine()
         for (byte i = 1; i < 7; i++) tune[i] = presetTune[i] = 100;
     }
 
-    // pressed save - initiate rocket start (countdown!)
-    if (savePressed) {
-        savecc++;
 
-        if (savecc > 1000) {
-            savecc = 0;
+    // pressed encoder - initiate rocket start (countdown!)
+    if (encPressed) {
+        encodercc++;
+
+        if (encodercc > 1000) {
+            encodercc = 0;
             countDown--;
-            ledNumber = countDown;
+
+            if (countDown < 9) ledNumber = aymidState.enabled ? 9-countDown : countDown;
 
             // release & save preset
             if (!countDown) {
-                savePressed = false;
-                save();
+                encPressed = false;
+
+                if (aymidState.enabled) {
+                    aymidState.enabled = false;
+
+                    // reload preset
+                    mode = 1;
+                    loadRequest = true;
+                }
+                else save();
             }
         }
-    } else savecc = 0;
+    } else encodercc = 0;
+
+
+    // load preset
+    if (loadRequest && displaycc >= 20000) {
+        loadRequest = false;
+
+        if (lastPreset != preset) {
+            lastPreset = preset;
+            EEPROM.write(3800, preset); 
+        }
+
+        if (lastBank != bank) {
+            lastBank = bank;
+            EEPROM.write(3801, bank);
+        }
+
+        oldNumber = ledNumber = (mode == 1) ? preset + 1 : bank + 1;
+        load();
+    }
+
 
     // pressed seq - sequencer setup mode
     if (seqPressed == 1) {

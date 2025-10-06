@@ -131,7 +131,8 @@ void buttPressedAymid(int pin, int state)
             case 1:     if (aymidState.preparedEnvType) sendImmediateEnvType(chip);
                         else                            aymidRestoreEnvType(chip);
 
-                        aymidState.isEncMode = true;
+                        encPressed = true;
+                        countDown = 20;
                         break;
 
             //
@@ -180,9 +181,14 @@ void buttPressedAymid(int pin, int state)
                         break;
 
             case 9:     // CHANNEL: d
-                        if (aymidState.isCtrlMode)
+                        if (aymidState.isCtrlMode) {
                             aymidState.isCleanMode = !aymidState.isCleanMode;
-                        else {
+
+                            // special case: envshape
+                            if (aymidState.isCleanMode)
+                                updateLastAY3Values(chip, 0, InitState::ENVTYPE);
+
+                        } else {
                             aymidRestoreVoice(chip, voice, InitState::ALL);
                             aymidState.isCleanMode = false;
                         }
@@ -205,7 +211,7 @@ void buttPressedAymid(int pin, int state)
             // ENCODER SWITCH
             //
 
-            case 1:     aymidState.isEncMode = false;
+            case 1:     encPressed = false;
                         break;
 
             //
@@ -318,11 +324,8 @@ void buttPressed(int pin, int state)
                         // toggle preset / bank
                         } else if (!pressedRow) {
 
-                            // mode: PRESET / BANK
-                            mode = (mode == 1) ? 2 : 1;
-
-                            savePressed = true;
-                            countDown = 9;
+                            encPressed = true;
+                            countDown = 20;
                             oldNumber = ledNumber;
                         }
                         break;
@@ -454,7 +457,7 @@ void buttPressed(int pin, int state)
                         pressedRow = 5;
 
                         seqPressed = 1;
-                        countDown = 9;
+                        countDown = 20;
 
                         copyDisplay();
                         encoderMoved(0);
@@ -528,22 +531,16 @@ void buttPressed(int pin, int state)
             // ENCODER SWITCH
             //
 
-            case 1:     // handle except envelope selection
+            case 1:     // handle except noise & envelope selection
                         if (pressedRow != 3 && !(pressedRow == 4 && envPeriodType == 0)) {
 
-                            savePressed = false;
+                            // toggle: PRESET / BANK
+                            if (countDown > 9) mode = (mode == 1) ? 2 : 1;
+
+                            encPressed = false;
                             ledNumber = oldNumber;
                             pressedRow = 0;
-
-                            // initial loading of preset
-                            if (initial) {
-                                initial = false;
-                                encoderMoved(0);
-                            }
-
-                            // store changed PRESET / BANK position & loading of preset
-                            if (lastPreset != preset)   { encoderMoved(0); lastPreset = preset;  EEPROM.write(3800, preset); }
-                            if (lastBank != bank)       { encoderMoved(0); lastBank = bank;      EEPROM.write(3801, bank); }
+                            encoderMoved(0);
                         }
                         break;
 

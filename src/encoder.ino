@@ -220,8 +220,8 @@ void encoderMoved(int8_t dir)
             if (mode == 1)  preset  = value;
             else            bank    = value;
 
-            // load preset
-            load();
+            // initiate load request for changed preset/bank
+            if (lastPreset != preset || lastBank != bank) loadRequest = true;
         }
 
         // AMPLITUDE 0..15

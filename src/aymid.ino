@@ -13,49 +13,19 @@
 //          - update these registers to 0 interferes with the LED matrix (CFG_CLOCKTYPE mode, LED matrix switches off)
 //
 //
- 
-#define POT_VALUE_TO_AYMID_VOLUME(x) (rescaleLog(x >> 5, 0, 15, 0, 15))
+
+#define POT_VALUE_TO_AYMID_LOG15(x) (rescaleLog(x >> 5, 0, 15, 0, 15))                                  // 0..511 --> 0..15 (log)
+
+#define POT_VALUE_TO_AYMID_VOLUME(x) (POT_VALUE_TO_AYMID_LOG15(x))                                      // 0..center (0..511/1023 --> 15/31)
+#define POT_VALUE_TO_AYMID_PAN_LEFT(x) (min(15, max(0, POT_VALUE_TO_AYMID_LOG15(x))))                   // 0..15 (log)
+#define POT_VALUE_TO_AYMID_PAN_RIGHT(x) (min(31, max(16, 31-POT_VALUE_TO_AYMID_LOG15((511+(512-x))))))  // 16..31 (rev.log)
 #define POT_VALUE_TO_AYMID_FINETUNE(x) (x >> 1)
 #define POT_VALUE_TO_AYMID_FINETUNE_ENV(x) (x << 1)
 #define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (x >> 5)
 
+#define PAN_NOON        15
 #define VOLUME_AY3FILE  16
 #define NOISE_AY3FILE   32
-
-// AY_EMUL stereo separation (0..255) to REG (0..15) by >> 4:
-//
-// 255 --> 15
-// 170 --> 10
-//  85 --> 5
-//  13 --> 1/0
-
-// Stereo separation and channel cross talk
-// POT 0.. 512..1023 - variable mix from L/R stereo sep. (15/0, 10/10, 0/15) to mono mix (10, 10, 10)
-//
-// VAL 15..15..10   (STEREO CHANNEL REAL)    A --> R, C --> L, limited to 10 (>POT NOON 512)
-// VAL 0 .. 5..10   (STEREO CHANNEL COPY)    A --> L, C --> R, from 0 to 5 (POT NOON) to 10
-// VAL 10..10..10   (MONO CHANNEL)           B --> L, B --> R, limited to 10
-
-// but requested AMP REG changes have to calculate in ratio
-// 
-//  A1          B1          C1          A2          B2          C2      Mode (-/NOON/+)
-//  15          10 B1*10/15  5 C2*5/15   5 A1*5/15  10 B2*10/15 15      NOON
-//  14           9           5           5           9          14      
-//  13           9           4           4           9          13
-//  12           8           4           4           8          12
-//  11           7           4           3           8          11
-//  10           7           3
-//   9           6           3
-//   8           5           3
-//   7           5           2
-//   6           4           2
-//   5           3           2
-//   4           3           1
-//   3           2           1
-//   2           1           1
-//   1           1           0
-//   0           0           0
-
 
 union selected_AY3s_t {
     byte selection;
@@ -83,6 +53,8 @@ struct aymidState_t {
 
     int adjustVolume[AY3CHIPS][AY3VOICES];
     int adjustVolumeBuf[AY3CHIPS][AY3VOICES];
+
+    int adjustPan[AY3VOICES];
 
     int adjustOctave[AY3CHIPS][AY3VOICES];
     int adjustFine[AY3CHIPS][AY3VOICES];
@@ -244,6 +216,7 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
             aymidState.overrideNoiseBuf[chip][voice] = OverrideState::AY3FILE;
             aymidState.overrideEnvBuf[chip][voice] = OverrideState::AY3FILE;
             aymidState.adjustVolumeBuf[chip][voice] = VOLUME_AY3FILE;
+            aymidState.adjustPan[voice] = PAN_NOON;
         }
     }
 }
@@ -256,41 +229,11 @@ void initializeAY3s() {
     for (size_t reg = 0; reg < sizeof(aymidState.lastAY3values) / (sizeof(*aymidState.lastAY3values)); reg++) {
         aymidState.lastAY3values[reg] = (reg == AY3_MIXER) ? 0xff : 0;
     }
-
-    //aymidState.lastAY3values[AY3_AMPA] = 0xF;
-    //aymidState.lastAY3values[AY3_AMPB] = 0xF;
-    //aymidState.lastAY3values[AY3_AMPC] = 0xF;
 }
 
 void setAY3Register(byte chip, byte address, byte data) {
-
-    // MID reduction doesn't work
-    /*if (address == AY3_AMPB) {
-        if (data & 0x10) 
-            AY3(AY3_ENVTYPE, ay3Reg1[AY3_ENVTYPE] - 5); // reduce env
-        else {
-            byte ampB = data & 0xF; // filter amp data
-            data &= 0x10;           // erase except 5.bit
-            data |= ampB - 5;       // reduce and copy
-        }
-    }*/
-
-    if (!chip) { // 1st chip
-
-        // A B C (ignore C)
-        //if (address == AY3_TONEA_PITCH_LO+4 || address == AY3_TONEA_PITCH_HI+4) return;
-
-        // SYNCED
-        AY3(address, data);
-    
-    } else { // 2nd chip
-
-        // A B C (ignore A)
-        //if (address == AY3_TONEA_PITCH_LO || address == AY3_TONEA_PITCH_HI) return;
-
-        // SYNCED
-        AY32(address, data);
-    }
+    if (!chip)  AY3(address, data);     // CHIP I
+    else        AY32(address, data);    // CHIP II
 }
 
 void updateLastAY3Values(int chip, byte voice, InitState init) {
@@ -378,11 +321,6 @@ void sendImmediateAY3Value(int chip, size_t reg, byte data) {
 void aymidRestore(int chip) {
     aymidInit(chip);
     updateLastAY3Values(chip, 0, InitState::ALL);
-
-    //showFilterModeLEDs(aymidState.lastAY3values[SID_FILTER_MODE_VOLUME]);
-    //showFilterResoLEDs(aymidState.lastAY3values[SID_FILTER_RESONANCE_ROUTING]);
-    //showFilterRouteLEDs(aymidState.lastAY3values[SID_FILTER_RESONANCE_ROUTING]);
-    //showFilterCutoffLEDs(aymidState.lastAY3values[SID_FILTER_CUTOFF_HI]);
 }
 
 /*
@@ -489,6 +427,18 @@ void aymidRestoreVolume(int chip, int voice) {
         for (byte voice = first; voice <= last; voice++)
             aymidState.adjustVolume[chip][voice] = VOLUME_AY3FILE;
     }
+}
+
+/*
+ * Restore pan adjustments
+ */
+void aymidRestorePan(int voice) {
+
+    byte first  = voice > -1 ? voice : 0;
+    byte last   = voice > -1 ? voice : AY3VOICES - 1;
+
+    for (byte voice = first; voice <= last; voice++)
+        aymidState.adjustPan[voice] = PAN_NOON;
 }
 
 /*
@@ -843,14 +793,20 @@ void aymidUpdateVolume(int chip, int voice) {
             byte reg = AY3_AMPA + voice;
 
             // Save currently used env enable flag (used by same register)
-            byte data = ay3Reg1Last[reg] & 0x10;
+            byte data = (chip == first ? ay3Reg1Last[reg] : ay3Reg2Last[reg]) & 0x10;
 
             // Calc new adjusted volume
             int volume = aymidState.adjustVolume[chip][voice];
-            
+
             // Works in a range of 0..x limit to 16 (NOON)
             volume = volume > VOLUME_AY3FILE ? VOLUME_AY3FILE : volume;
             volume = (aymidState.lastAY3values[reg] & 0x0f) + volume - VOLUME_AY3FILE;
+
+            // Pan
+            byte pan = aymidState.adjustPan[voice];
+            if (pan < PAN_NOON && chip == 1) volume -= PAN_NOON - pan;
+            if (pan > PAN_NOON && chip == 0) volume += PAN_NOON - pan;
+
             volume = max(0, min(15, volume));
             data |= volume;
 
@@ -923,7 +879,7 @@ void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte d
         if (!aymidState.isCleanMode) {
 
             // Calculate octave switch (-2, -1, 0, +1, +2) (found alternative? use alternate value)
-            byte adjustOctaveEnv = found ? aymidState.adjustOctaveEnvAlt[chip] : aymidState.adjustOctaveEnv[chip];
+            int adjustOctaveEnv = found ? aymidState.adjustOctaveEnvAlt[chip] : aymidState.adjustOctaveEnv[chip];
 
             if      (adjustOctaveEnv > 0)  pitch <<=   adjustOctaveEnv;
             else if (adjustOctaveEnv < 0)  pitch >>= (-adjustOctaveEnv);
@@ -1071,11 +1027,18 @@ bool runAmp(byte chip, byte voice, byte* data) {
 
     // Volume (limit to 16)
     int volume = aymidState.adjustVolume[chip][voice];
-    if (volume < VOLUME_AY3FILE) {
-        volume = (*data & 0x0f) + volume - VOLUME_AY3FILE;
-        volume = max(0, min(15, volume));
-        *data = (*data & 0xf0) | volume;
-    }
+
+    // Works in a range of 0..x limit to 16 (NOON)
+    volume = volume > VOLUME_AY3FILE ? VOLUME_AY3FILE : volume;
+    volume = (*data & 0x0f) + volume - VOLUME_AY3FILE;
+
+    // Pan
+    byte pan = aymidState.adjustPan[voice];
+    if (pan < PAN_NOON && chip == 1)  volume -= PAN_NOON - pan;
+    if (pan > PAN_NOON && chip == 0)  volume += PAN_NOON - pan;
+
+    volume = max(0, min(15, volume));
+    *data = (*data & 0xf0) | volume;
 
     // Env
     if (aymidState.overrideEnv[chip][voice] == OverrideState::ON) {
@@ -1271,6 +1234,9 @@ void handleAymidFrameUpdate(const byte* buffer) {
  */
 void visualizeAY3LEDs() {
 
+    // pix mode
+    if (displaycc < MAX_LEDPICCOUNT) return;
+
     byte chip = 0, data, amp[AY3VOICES], env[AY3VOICES], vol[AY3VOICES];
 
     // Visualize everything - done after sound is produced to maximize good timing.
@@ -1285,9 +1251,16 @@ void visualizeAY3LEDs() {
         // Get volume adjustment (limiter)
         //
 
-        // Works in a range of 0..x limit to 16 (NOON)
-        for (byte voice = 0; voice < AY3VOICES; voice++)
-            vol[voice] = aymidState.adjustVolume[chip][voice] >= VOLUME_AY3FILE ? 0 : 1;
+        for (byte voice = 0; voice < AY3VOICES; voice++) {
+
+            // Volume works in a range of 0..x limit to 16 (NOON)
+            // Pan works in a range of 0..31 (PAN_NOON = 15)
+
+            if (aymidState.isAltMode) {
+                vol[voice] =    aymidState.adjustPan[voice] > PAN_NOON - 1 && 
+                                aymidState.adjustPan[voice] < PAN_NOON + 1 ? 0 : 1;
+            } else vol[voice] = aymidState.adjustVolume[chip][voice] >= VOLUME_AY3FILE ? 0 : 1;
+        }
 
         //
         // Get the latest used AY3 register data
@@ -1362,7 +1335,7 @@ void aymidProcessMessage(const byte* buffer, unsigned int size) {
                 initializeAY3s();
                 aymidRestore(-1); // TODO
             }
-            pressedRow = 1;
+            if (!pressedRow) pressedRow = 1;
             break;
 
         case 0x4d:

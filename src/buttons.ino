@@ -257,7 +257,7 @@ void buttPressed(int pin, int state)
         if (displaycc < 20000) restoreMatrix();
 
         // general handling
-        if ((pressedRow == 1 && pin == 8 && voiceMode == VOICE_ENABLE) ||  // [V T E release]
+        if ((pressedRow == 1 && pin == 8 && voiceMode == VOICE_TUNING) ||  // [E V T release]
             (pressedRow == 2 && pin == 5) ||
             (pressedRow == 5 && pin == 4)) {
 

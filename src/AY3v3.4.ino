@@ -3,7 +3,7 @@
 #include <assert.h>
 
 /***********************************
-    -= AY3 version 4 (0.85) =-
+    -= AY3 version 4 (4.00) =-
       ~-~-= phoenix =-~-~-
 
         + synth engine overhaul
@@ -22,7 +22,7 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 //
 
 // flags                            // PRODUCTION MODE: ALL ENABLED
-#define FACTORYRESET    0           // ENABLE FACTORY RESET
+#define FACTORYRESET    1           // ENABLE FACTORY RESET
 #define LEDSUPPRESSION  1           // ENABLE LED FLICKER SUPPRESSION
 #define ZXTUNING        1           // ADAPT NOTES/ENV VALUES AS FOR ATARI CLOCK
 #define CLOCK_LOW_EMU   1           // CLOCK LOW FREQ ADAPTION (500Hz), old firmware emulation
@@ -140,7 +140,7 @@ byte pottickcc          = 0;
 byte seqtickcc          = 0;
 byte analogcc           = 0;
 byte clockcc            = 0;
-byte countDown          = 20;
+byte countDown          = 0;
 bool inputToggle        = false;
 uint16_t maincc         = 0;
 uint16_t encodercc      = 0;
@@ -160,7 +160,7 @@ int lastStateCLK        = -1;       // init -1 to ignore first poll
 
 // buttons
 byte butt[20];
-byte buttLast[20]       = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}; // released state!
+byte buttLast[20];
 byte selectRow          = 0;
 byte pressedRow         = 0;
 byte pressedCol         = 9;
@@ -420,8 +420,8 @@ void setup()
 
 #if FACTORYRESET
     // FACTORY RECOVERY
-    if (!digitalRead(5)) // boot +noise btn
-        factoryReset(); // reinit EEPROM with factory data
+    if (!digitalRead(5) && !digitalRead(7)) // boot +noise btn +e btn
+        factoryReset(); // reinit EEPROM with factory data, shows a "F"
 #endif
 
     //

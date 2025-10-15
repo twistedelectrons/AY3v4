@@ -5,13 +5,16 @@ void doDetune(byte data)
 
         chord = 0;
 
-        offsetFreq[1] = 0;
-        offsetFreq[2] = -data / 20;
-        offsetFreq[3] = +data / 10;
+        // high clock adaption
+        uint8_t shift = (clockType != CLOCK_LOW) ? 2 : 0;
 
-        offsetFreq[4] = +data / 30;
-        offsetFreq[5] = -data / 10;
-        offsetFreq[6] = +data / 20;
+        offsetFreq[1] = 0;
+        offsetFreq[2] = -data / (20 >> shift);
+        offsetFreq[3] = +data / (10 >> shift);
+
+        offsetFreq[4] = +data / (30 >> shift);
+        offsetFreq[5] = -data / (10 >> shift);
+        offsetFreq[6] = +data / (20 >> shift);
 
         for (byte i = 1; i < 7; i++) {
             offsetNote[i] = 0;

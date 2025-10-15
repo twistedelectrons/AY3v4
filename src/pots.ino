@@ -106,10 +106,30 @@ void potTickAymid()
 
                         if (volumeControlled) {
 
-                            // VOLUME
-                            for (byte chip = 0; chip < AY3CHIPS; chip++) {
-                                aymidState.adjustVolume[chip][voice] = POT_VALUE_TO_AYMID_VOLUME(analogTemp);
-                                aymidUpdateVolume(chip, voice);
+                            if (aymidState.isAltMode) {
+
+                                // PAN  0 <----- log ----- [15] --- rev.log ---> 31
+                                //             (0..15)    center   (16..31)
+                                //
+                                //  center: PAN_NOON 15
+                                //  left:   0..511      >>  0..15  (log)        >>  pan: 0..15 (log)
+                                //  right:  512..1023   >>  16..31 (rev.log)    >>  pan: 15..0 (rev.log)
+
+                                byte pan;
+                                if (analogTemp < 512)   
+                                    pan  = POT_VALUE_TO_AYMID_PAN_LEFT(analogTemp);
+                                else pan = POT_VALUE_TO_AYMID_PAN_RIGHT(analogTemp);
+
+                                aymidState.adjustPan[voice] = pan;
+                                aymidUpdateVolume(-1, voice);
+
+                            } else {
+
+                                // VOLUME
+                                for (byte chip = 0; chip < AY3CHIPS; chip++) {
+                                    aymidState.adjustVolume[chip][voice] = POT_VALUE_TO_AYMID_VOLUME(analogTemp);
+                                    aymidUpdateVolume(chip, voice);
+                                }
                             }
 
                         } else {

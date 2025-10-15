@@ -38,7 +38,7 @@ void save()
         writey(envNumber[1]);
         writey(noiseFreq[1]);
 
-        writey(lastEnvSpeed & 0xF);
+        writey(lastEnvSpeed & 0xff);
         writey(lastEnvSpeed >> 8);
         writey(envMode);
         writey(noiseMode);

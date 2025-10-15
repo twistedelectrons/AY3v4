@@ -71,7 +71,7 @@ void tickStateMachine()
 
 
     // load preset
-    if (loadRequest && displaycc >= 20000) {
+    if (loadRequest && !writeConfig && displaycc >= 20000) {
         loadRequest = false;
 
         if (lastPreset != preset) {
@@ -131,7 +131,6 @@ void tickStateMachine()
         // prevent conflicts
         if (!writeConfig) displaycc++;
 
-
     // Counter to wipe numbers on led matrix and revert back to stored led matrix
-    } else restoreMatrix();
+    } else if (!writeConfig) restoreMatrix();
 }

@@ -70,5 +70,12 @@ void factoryReset()
 {
     for (uint16_t i = 0; i < 3800; i++)
         EEPROM.update(i, factory[i]);
+
+    displaycc = 0;
+    ledMatrixPic[1] = B011111;
+    ledMatrixPic[2] = B000011;
+    ledMatrixPic[3] = B011111;
+    ledMatrixPic[4] = B000011;
+    ledMatrixPic[5] = B000011;
 }
 #endif

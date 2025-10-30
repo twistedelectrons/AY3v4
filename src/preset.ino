@@ -42,6 +42,8 @@ void save()
         writey(lastEnvSpeed >> 8);
         writey(envMode);
         writey(noiseMode);
+
+        writey(seqMax);
     }
 }
 
@@ -166,6 +168,10 @@ void load()
 
     // noise mode
     noiseMode = readey();
+
+    // seq length
+    seqMax = readey();
+    if (!seqMax) seqMax = 15;
 
     // stop envelope freq
     stopEnvSpeed();

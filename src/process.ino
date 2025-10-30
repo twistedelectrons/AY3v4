@@ -98,7 +98,7 @@ void processMixerAndSteps()
 
     // next
     seqStep++;
-    if (seqStep > 15) seqStep = 0;
+    if (seqStep > seqMax) seqStep = 0;
 }
 
 void processMixer(bool updateStep)

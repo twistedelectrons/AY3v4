@@ -105,8 +105,6 @@ void tickStateMachine()
 
                 // silence voices, entering setup
                 if (seqSetup == EDIT) {
-                    base[1] = base[2] = base[3] = base[4] = base[5] = base[6] = 0;
-
                     bitWrite(data7A, 0, 1);
                     bitWrite(data7A, 1, 1);
                     bitWrite(data7A, 2, 1);
@@ -126,6 +124,10 @@ void tickStateMachine()
 
                     pressedRow = 0;
                 }
+
+                // release all notes
+                for (byte i = 0; i < 7; i++)
+                    held[i] = base[i] = 0;
 
                 encoderMoved(0);
             }

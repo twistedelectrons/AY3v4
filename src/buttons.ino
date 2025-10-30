@@ -250,14 +250,16 @@ void buttPressed(int pin, int state)
     // AYMID routine
     if (aymidState.enabled) return buttPressedAymid(pin, state);
 
+    // ignore buttons in config mode
+    if (writeConfig) {
+
+        // visuals by release
+        if (state) encoderMoved(0);
+        return;
+    }
+
     // pressed
     if (state == 0) {
-
-        // ignore buttons in config mode
-        if (writeConfig) {
-             encoderMoved(0);
-             return;
-         }
 
         // restore current matrix values
         if (displaycc < 20000) restoreMatrix();
@@ -337,6 +339,12 @@ void buttPressed(int pin, int state)
                                     if (m == 0) updateEnvSpeed();
                                 }
                             }
+
+                        // seq length
+                        } else if (seqSetup == EDIT) {
+                            seqMax = selectedStep;
+                            if (!seqMax) seqMax = 15;
+                            maincc = 2;
 
                         // toggle preset / bank
                         } else if (!pressedRow) {
@@ -560,7 +568,7 @@ void buttPressed(int pin, int state)
             //
 
             case 1:     // handle except noise & envelope selection
-                        if (pressedRow != 3 && !(pressedRow == 4 && envPeriodType == 0)) {
+                        if (pressedRow != 3 && seqSetup != EDIT && !(pressedRow == 4 && envPeriodType == 0)) {
 
                             // toggle: PRESET / BANK
                             if (countDown > 9) mode = (mode == 1) ? 2 : 1;

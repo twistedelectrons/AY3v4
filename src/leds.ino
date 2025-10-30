@@ -3,8 +3,9 @@
 
 // internals
 int matrixFlasher;
-bool flippedS = false;
 bool flippedN = false;
+bool flippedS = false;
+bool flippedZ = false;
 byte runnercc = 0;
 byte runnerln = 0;
 
@@ -21,8 +22,8 @@ void ledTickAymid()
                 if (ledNumber == 3) { maskB = B11111011; maskC = B01000000; }
                 if (ledNumber == 4) { maskB = B11110111; maskC = B01000000; }
                 if (ledNumber == 5) { maskB = B11101111; maskC = B01000000; }
-                if (ledNumber == 7) { maskB = B11111101; maskC = B10000000; }
                 if (ledNumber == 6) { maskB = B11111110; maskC = B10000000; }
+                if (ledNumber == 7) { maskB = B11111101; maskC = B10000000; }
                 if (ledNumber == 8) { maskB = B11111011; maskC = B10000000; }
 
                 if (!flippedN && aymidState.preparedEnvType) maskB = B11111111;
@@ -132,13 +133,10 @@ void doLedMatrix()
 
     if (displaycc >= MAX_LEDPICCOUNT)
     {
-        if (matrixFlasher > 1000)   flippedN = true;
-        else                        flippedN = false; // Normal
-
-        if (maincc % 2 == 0)        flippedS = true;
-        else                        flippedS = false; // Slow
-
-    } else flippedS = flippedN = false;
+        if (matrixFlasher > 1000)   flippedN = true; else flippedN = false; // normal
+        if (maincc % 2 == 0)        flippedS = true; else flippedS = false; // 2x slower
+        if (maincc % 4 == 0)        flippedZ = true; else flippedZ = false; // 4x slower
+    } else flippedZ = flippedS = flippedN = false;
 
     // AYMID routine
     if (aymidState.enabled) return ledTickAymid();
@@ -169,12 +167,35 @@ void doLedMatrix()
                 if (ledNumber == 3) { maskB = B11111011; maskC = B01000000; }
                 if (ledNumber == 4) { maskB = B11110111; maskC = B01000000; }
                 if (ledNumber == 5) { maskB = B11101111; maskC = B01000000; }
-                if (ledNumber == 7) { maskB = B11111101; maskC = B10000000; }
                 if (ledNumber == 6) { maskB = B11111110; maskC = B10000000; }
+                if (ledNumber == 7) { maskB = B11111101; maskC = B10000000; }
                 if (ledNumber == 8) { maskB = B11111011; maskC = B10000000; }
 
                 // flash selected
-                if (seqmode && !flippedN) maskB = B11111111;
+                if (seqmode) {
+
+                    if (!flippedN) {
+
+                        maskB = B11111111;
+                        maskC = B00000000;
+
+                        // show sequencer max bit (seq length)
+                        if ((selectedStep < 8 && seqMax < 8) || (selectedStep >= 8 && seqMax >= 8)) {
+
+                            if (flippedZ) {
+
+                                if (seqMax % 8 == 0) { maskB = B11111110; maskC = B01000000; }
+                                if (seqMax % 8 == 1) { maskB = B11111101; maskC = B01000000; }
+                                if (seqMax % 8 == 2) { maskB = B11111011; maskC = B01000000; }
+                                if (seqMax % 8 == 3) { maskB = B11110111; maskC = B01000000; }
+                                if (seqMax % 8 == 4) { maskB = B11101111; maskC = B01000000; }
+                                if (seqMax % 8 == 5) { maskB = B11111110; maskC = B10000000; }
+                                if (seqMax % 8 == 6) { maskB = B11111101; maskC = B10000000; }
+                                if (seqMax % 8 == 7) { maskB = B11111011; maskC = B10000000; }
+                            }
+                        }
+                    }
+                }
 
                 PORTB = maskB;
                 PORTC = maskC;

@@ -245,7 +245,7 @@ void doLedMatrix()
                     if (maskC) {
 
                         // selected voice
-                        if (pressedCol < 7) {
+                        if (pressedCol && pressedCol < 7) {
 
                             // slow 3x
                             if (flippedS)   maskC =  B00000000; // clr all
@@ -383,7 +383,7 @@ void showMatrixedNumber(byte value)
 //  value = last - col (of row)
 //
 
-    if (displaycc >= MAX_LEDPICCOUNT) copyDisplay();
+    if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
 
     displaycc = 0;
 
@@ -419,7 +419,7 @@ void showMatrixedNumber(byte value)
     */
 }
 
-void restoreMatrix()
+void restoreMatrix(bool restoreNumber)
 {
     if (displaycc != 20000) {
         displaycc = 20000;
@@ -428,18 +428,24 @@ void restoreMatrix()
         ledMatrix[3] = oldMatrix[3];
         ledMatrix[4] = oldMatrix[4];
         ledMatrix[5] = oldMatrix[5];
+
+        if (restoreNumber) ledNumber = oldNumber;
     }
 }
 
-void copyDisplay()
+void copyMatrix()
 {
-    oldNumber = ledNumber;
-
     oldMatrix[1] = ledMatrix[1];
     oldMatrix[2] = ledMatrix[2];
     oldMatrix[3] = ledMatrix[3];
     oldMatrix[4] = ledMatrix[4];
     oldMatrix[5] = ledMatrix[5];
+}
+
+void copyDisplay()
+{
+    oldNumber = ledNumber;
+    copyMatrix();
 }
 
 void resetDisplay()
@@ -461,10 +467,7 @@ void copyAndResetDisplay()
 
 void restoreDisplay()
 {
-    ledNumber = oldNumber;
-
-    displaycc = 0;
-    restoreMatrix();
+    restoreMatrix(true);
 }
 
 void setPoint(byte row, byte col)

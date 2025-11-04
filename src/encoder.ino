@@ -288,10 +288,6 @@ void encoderMoved(int8_t dir)
         // NOISE FREQ 0..31
         if (pressedRow == 3) {
 
-            // zapping (dir 0) inside row should not 
-            // change values by dual chip selection
-            if (selectedChip == -1 && !dir) return;
-
             int8_t value = 0;
 
             byte first  = selectedChip < 0 ? 0 : selectedChip;
@@ -312,6 +308,10 @@ void encoderMoved(int8_t dir)
                 }
             }
 
+            // zapping (dir 0) inside row should not 
+            // change values by dual chip selection
+            if (selectedChip == -1 && !dir) return;
+
             for (byte chip = first; chip <= last; chip++) {
 
                 // update noise params
@@ -325,10 +325,6 @@ void encoderMoved(int8_t dir)
 
         // ENVELOPE SHAPE 1..8
         if (pressedRow == 4) {
-
-            // zapping (dir 0) inside row should not 
-            // change values by dual chip selection
-            if (selectedChip == -1 && !dir) return;
 
             byte value = 0;
             byte shape = 0;
@@ -359,6 +355,10 @@ void encoderMoved(int8_t dir)
                     break;
                 }
             }
+
+            // zapping (dir 0) inside row should not 
+            // change values by dual chip selection
+            if (selectedChip == -1 && !dir) return;
 
             for (byte chip = first; chip <= last; chip++) {
 

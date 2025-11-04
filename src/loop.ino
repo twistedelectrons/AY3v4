@@ -112,7 +112,7 @@ void tickStateMachine()
                     bitWrite(data7B, 1, 1);
                     bitWrite(data7B, 2, 1);
 
-                    if (displaycc >= MAX_LEDPICCOUNT) copyDisplay();
+                    if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
 
                     displaycc = 0;
          
@@ -145,5 +145,5 @@ void tickStateMachine()
         if (!writeConfig) displaycc++;
 
     // Counter to wipe numbers on led matrix and revert back to stored led matrix
-    } else if (!writeConfig) restoreMatrix();
+    } else if (!writeConfig) restoreDisplay();
 }

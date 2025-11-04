@@ -261,17 +261,11 @@ void buttPressed(int pin, int state)
     // pressed
     if (state == 0) {
 
+        // local counter
+        byte counter = 0;
+
         // restore current matrix values
-        if (displaycc < 20000) restoreMatrix();
-
-        // general handling
-        if ((pressedRow == 1 && pin == 8 && voiceMode == VOICE_TUNING) ||  // [E V T release]
-            (pressedRow == 2 && pin == 5)) {
-
-            pressedRow = 0;
-            ledNumber = oldNumber;
-            return;
-        }
+        if (displaycc < 20000) restoreMatrix(false);
 
         // edit sequence mode? ignore input for row 6
         if (seqSetup == EDIT && pressedRow == 6 && (
@@ -294,10 +288,7 @@ void buttPressed(int pin, int state)
                             // no sequence?
                             if (seqSetup == NONE) {
 
-                                // update state
-                                encoderMoved(0);
-
-                                if (displaycc >= MAX_LEDPICCOUNT) copyDisplay();
+                                if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
 
                                 byte m = pressedRow == 3 ? noiseMode : envMode;
 
@@ -362,47 +353,49 @@ void buttPressed(int pin, int state)
             case 8:     // ROW 1: VOICE
                         pressedRow = 1;
 
-                        // initiate voicePressed state
-                        resetcc = millis() + 4000;
+                        // initiate voicePressed state (4 seconds)
+                        resetcc = millis() + 4000; 
                         voicePressed = true;
 
                         // sequence?
                         if (seqSetup == EDIT) seqVoice[selectedStep] = !seqVoice[selectedStep];
                         else {
 
-                            // update state
-                            encoderMoved(0);
-
-                            if (displaycc >= MAX_LEDPICCOUNT) copyDisplay();
+                            if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
 
                             // roll voice mode [E V T]
                             voiceMode++;
-                            if (voiceMode > VOICE_TUNING) voiceMode = VOICE_ENABLE;
+                            if (voiceMode > VOICE_TUNING) {
+                                pressedRow = 0;
+                                ledNumber = oldNumber;
 
-                            displaycc = 0;
+                            } else {
 
-                            if (voiceMode == VOICE_ENABLE) {
-                                ledMatrixPic[1] = B011110;
-                                ledMatrixPic[2] = B000011;
-                                ledMatrixPic[3] = B001111;
-                                ledMatrixPic[4] = B000011;
-                                ledMatrixPic[5] = B011110;
-                            }
+                                displaycc = 0;
 
-                            if (voiceMode == VOICE_VOLUME) {
-                                ledMatrixPic[1] = B110011;
-                                ledMatrixPic[2] = B110011;
-                                ledMatrixPic[3] = B110011;
-                                ledMatrixPic[4] = B011110;
-                                ledMatrixPic[5] = B001100;
-                            }
+                                if (voiceMode == VOICE_ENABLE) {
+                                    ledMatrixPic[1] = B011110;
+                                    ledMatrixPic[2] = B000011;
+                                    ledMatrixPic[3] = B001111;
+                                    ledMatrixPic[4] = B000011;
+                                    ledMatrixPic[5] = B011110;
+                                }
 
-                            if (voiceMode == VOICE_TUNING) {
-                                ledMatrixPic[1] = B111111;
-                                ledMatrixPic[2] = B111111;
-                                ledMatrixPic[3] = B001100;
-                                ledMatrixPic[4] = B001100;
-                                ledMatrixPic[5] = B001100;
+                                if (voiceMode == VOICE_VOLUME) {
+                                    ledMatrixPic[1] = B110011;
+                                    ledMatrixPic[2] = B110011;
+                                    ledMatrixPic[3] = B110011;
+                                    ledMatrixPic[4] = B011110;
+                                    ledMatrixPic[5] = B001100;
+                                }
+
+                                if (voiceMode == VOICE_TUNING) {
+                                    ledMatrixPic[1] = B111111;
+                                    ledMatrixPic[2] = B111111;
+                                    ledMatrixPic[3] = B001100;
+                                    ledMatrixPic[4] = B001100;
+                                    ledMatrixPic[5] = B001100;
+                                }
                             }
                         }
                         break;
@@ -410,10 +403,7 @@ void buttPressed(int pin, int state)
             case 5:     // ROW 2: LFO/ARP
 
                         // no sequence? -> lfo pitch
-                        if (seqSetup == NONE) {
-                            pressedRow = 2;
-                            encoderMoved(0);
-                        }
+                        if (seqSetup == NONE) pressedRow = pressedRow == 2 ? 0 : 2;
                         break;
 
             case 10:    // ROW 3: NOISE
@@ -439,13 +429,15 @@ void buttPressed(int pin, int state)
                                 // release (select both chips)
                                 } else {
                                     selectedChip = -1;
-                                    pressedRow = 0;
                                     pressedCol = 0;
+
+                                    // goto preset
+                                    pressedRow = 0;
                                     ledNumber = oldNumber;
 
                                     // store last single chip
                                     lastSingleChip = 0;
-                                    return;
+                                    break;
                                 }
                             }
 
@@ -454,9 +446,11 @@ void buttPressed(int pin, int state)
                             // no sequence
                             if (seqSetup == NONE) {
 
-                                // select chip 1
+                                // select both chips
                                 selectedChip = -1;
-                                pressedCol = 0;
+                                
+                                // select column
+                                pressedCol = lastSingleChip;
                             }
                         }
 
@@ -465,18 +459,13 @@ void buttPressed(int pin, int state)
                             pressedRow = 3;
 
                             // sequence?
-                            if (seqSetup == EDIT)
-                                seqNoise[selectedStep] = !seqNoise[selectedStep];
-                            else encoderMoved(0);
+                            if (seqSetup == EDIT) seqNoise[selectedStep] = !seqNoise[selectedStep];
 
                         // ENVELOPE
                         } else {
 
                             // no sequence? -> env
-                            if (seqSetup == NONE) {
-                                pressedRow = 4;
-                                encoderMoved(0);
-                            }
+                            if (seqSetup == NONE) pressedRow = 4;
                         }
                         break;
 
@@ -491,48 +480,39 @@ void buttPressed(int pin, int state)
                         if (pressedRow == 5 || seqSetup == EDIT) {
 
                             // exit mode
-                            pressedRow = 0;
                             seqSetup = NONE;
+                            seqPressed = false;
+
+                            // goto preset
+                            pressedRow = 0;
+                            ledNumber = oldNumber;
 
                         } else pressedRow = 5;
-
-                        encoderMoved(0);
                         break;
 
             //
             // MATRIX COLS
             //
 
-            case 11:    // CHANNEL: a
-                        pressedCol = 1;
-                        selectedChip = 0;
+            case 6:     counter++;  // CHANNEL: c
+            case 2:     counter++;  // CHANNEL: b
+            case 11:    counter++;  // CHANNEL: a
+
+                        if (pressedRow) {
+                            pressedCol = counter;
+                            selectedChip = 0;
+                        }
                         break;
 
-            case 2:     // CHANNEL: b
-                        pressedCol = 2;
-                        selectedChip = 0;
-                        break;
+            case 3:     counter++;  // CHANNEL: f
+            case 12:    counter++;  // CHANNEL: e
+            case 9:     counter++;  // CHANNEL: d
 
-            case 6:     // CHANNEL: c
-                        pressedCol = 3;
-                        selectedChip = 0;
+                        if (pressedRow) {
+                            pressedCol = counter+3;
+                            selectedChip = 1;
+                        }
                         break;
-
-            case 9:     // CHANNEL: d
-                        pressedCol = 4;
-                        selectedChip = 1;
-                        break;
-
-            case 12:    // CHANNEL: e
-                        pressedCol = 5;
-                        selectedChip = 1;
-                        break;
-
-            case 3:     // CHANNEL: f
-                        pressedCol = 6;
-                        selectedChip = 1;
-                        break;
-
         }
 
         // store last single chip
@@ -541,22 +521,29 @@ void buttPressed(int pin, int state)
         // reset "voice mode: E"    
         if (pressedRow != 1) voiceMode = 0;
 
-        // show led states, (inclusive "voice mode: E")
-        if (pressedRow != 1 || (pressedRow == 1 && voiceMode == VOICE_ENABLE))
-        {
+        //
+        // CALCULATE & SHOW LED STATES
+        //
 
-            // MATRIX COLS
-            if (pin == 11 || pin == 2 || pin == 6 || pin == 9 || pin == 12 || pin == 3)
-            {
-                bitWrite(ledMatrix[pressedRow], pressedCol - 1, !bitRead(ledMatrix[pressedRow], pressedCol - 1));
+        // ignore voice tuning
+        if (voiceMode != VOICE_TUNING) {
 
-                // VOICE, NOISE, ENV handling
-                if (pressedRow == 1 ||
-                    pressedRow == 3 ||
-                    pressedRow == 4)
-                    encoderMoved(0);
+            // bit toggling (except voice volume)
+            if (pressedRow != 1 || (pressedRow == 1 && voiceMode == VOICE_ENABLE)) {
+
+                // MATRIX COLS
+                if (pin == 11 || pin == 2 || pin == 6 || pin == 9 || pin == 12 || pin == 3)
+                    bitWrite(ledMatrix[pressedRow], pressedCol - 1, !bitRead(ledMatrix[pressedRow], pressedCol - 1));
             }
-        }
+
+            // PRESET, ARP, VOICE, NOISE, ENV handling
+            if (pressedRow == 1 ||
+                pressedRow == 2 ||
+                pressedRow == 3 ||
+                pressedRow == 4)
+                encoderMoved(0);
+
+        } else ledNumber = 0;
 
     // released
     } else {

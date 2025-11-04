@@ -22,12 +22,15 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 // DEFINES
 //
 
+#define VERSION         4           // FIRMWARE VERSION
+
 // flags                            // PRODUCTION MODE: ALL ENABLED
 #define FACTORYRESET    1           // ENABLE FACTORY RESET
 #define LEDSUPPRESSION  1           // ENABLE LED FLICKER SUPPRESSION
 #define ZXTUNING        1           // ADAPT NOTES/ENV VALUES AS FOR ATARI CLOCK
 #define CLOCK_LOW_EMU   1           // CLOCK LOW FREQ ADAPTION (500Hz), old firmware emulation
 #define PITCHADJUSTMENT 1           // PITCHES ARE CALCULATED 2 OCTAVES DOWN
+#define USEVERSIONFLAG  1           // VALIDATES A VERSION FLAG TO IDENTIFY CONFIG STATE
 
 // timing (!don't touch!)
 #define COUNT_DELAY_ZX  2           // time-critical (sync: 0..4)           <<< initial offset <<< ?
@@ -301,13 +304,38 @@ const int noteTp[] = {                                  //              C-Notes 
 // the setup routine runs once when you press reset:
 void setup()
 {
+
+#if USEVERSIONFLAG
+    byte version = EEPROM.read(3840);
+
+    // version test
+    if (version != VERSION) {
+
+        // shift position
+        preset              = EEPROM.read(3800);
+        bank                = EEPROM.read(3801);
+        masterChannel       = EEPROM.read(3802);
+        boardRevision       = EEPROM.read(3803);
+        clockType           = EEPROM.read(3804);
+        envPeriodType       = EEPROM.read(3805);
+
+        EEPROM.write(3840, VERSION);
+        EEPROM.write(3841, preset);
+        EEPROM.write(3842, bank);
+        EEPROM.write(3843, masterChannel);
+        EEPROM.write(3844, boardRevision);
+        EEPROM.write(3845, clockType);
+        EEPROM.write(3846, envPeriodType);
+    }
+#endif
+
     // EEPROM
-    preset              = EEPROM.read(3800);
-    bank                = EEPROM.read(3801);
-    masterChannel       = EEPROM.read(3802);
-    boardRevision       = EEPROM.read(3803);
-    clockType           = EEPROM.read(3804);
-    envPeriodType       = EEPROM.read(3805);
+    preset              = EEPROM.read(3841);
+    bank                = EEPROM.read(3842);
+    masterChannel       = EEPROM.read(3843);
+    boardRevision       = EEPROM.read(3844);
+    clockType           = EEPROM.read(3845);
+    envPeriodType       = EEPROM.read(3846);
 
     // validation
     if (preset > 7)         preset          = 0;

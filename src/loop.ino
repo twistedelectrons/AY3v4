@@ -38,7 +38,18 @@ void tickStateMachine()
     if (voicePressed && millis() > resetcc) {
         voicePressed = false;
 
+        // reset tuning
         for (byte i = 1; i < 7; i++) tune[i] = presetTune[i] = 100;
+
+        if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
+
+        displaycc = 0;
+
+        ledMatrixPic[1] = B111111;
+        ledMatrixPic[2] = B111111;
+        ledMatrixPic[3] = B001100;
+        ledMatrixPic[4] = B001100;
+        ledMatrixPic[5] = B101100;
     }
 
 

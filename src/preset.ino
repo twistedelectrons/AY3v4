@@ -1,3 +1,56 @@
+void initPreset()
+{
+    // normal mode
+    if (!writeConfig) {
+
+        for (byte i = 0; i < 16; i++) seqNote[i] = 0;
+
+        for (byte i = 1; i < 7; i++) {
+            ledMatrix[i] = 0;
+            tune[i] = 100;
+            vol[i] = 8;
+        }
+
+        ledMatrix[1] = B001001;
+        vol[1] = 12;
+        vol[4] = 12;
+
+        arpSpeed = 1;
+        lfoShape = 1;
+        lfoSpeed = 1;
+        lfoDepth = 1;
+        envNumber[0] = 1;
+        envNumber[1] = 1;
+
+        lastEnvSpeedLUT = 2;
+        lastEnvSpeed = 0;
+
+        seqSpeed = 1;
+        detune = 1;
+        glide = 1;
+
+        noiseFreq[0] = 16;
+        noiseFreq[1] = 16;
+
+        for (byte i = 0; i < 8; i++) {
+            seqNoise[i]     = 0;
+            seqNoise[i + 8] = 0;
+            seqVoice[i]     = 0;
+            seqVoice[i + 8] = 0;
+        }
+
+        seqNoise1 = 0;
+        seqNoise2 = 0;
+        seqVoice1 = 0;
+        seqVoice2 = 0;
+
+        envMode = 0;
+        noiseMode = 0;
+
+        seqMax = 15;
+    }
+}
+
 void save()
 {
     // normal mode

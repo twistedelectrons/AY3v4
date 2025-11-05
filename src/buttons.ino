@@ -336,13 +336,31 @@ void buttPressed(int pin, int state)
                             seqMax = selectedStep;
                             if (!seqMax) seqMax = 15;
                             maincc = 2;
+                        
+                        } else {
 
-                        // toggle preset / bank
-                        } else if (!pressedRow) {
+                            // initialize preset
+                            if (voicePressed) {
 
-                            encPressed = true;
-                            countDown = 20;
-                            oldNumber = ledNumber;
+                                initPreset();
+
+                                if (displaycc >= MAX_LEDPICCOUNT) copyMatrix();
+
+                                displaycc = 0;
+
+                                ledMatrixPic[1] = B111111;
+                                ledMatrixPic[2] = B100001;
+                                ledMatrixPic[3] = B100001;
+                                ledMatrixPic[4] = B100001;
+                                ledMatrixPic[5] = B111111;
+
+                            // toggle preset / bank
+                            } else if (!pressedRow) {                    
+
+                                encPressed = true;
+                                countDown = 20;
+                                oldNumber = ledNumber;
+                            }
                         }
                         break;
 
@@ -353,8 +371,8 @@ void buttPressed(int pin, int state)
             case 8:     // ROW 1: VOICE
                         pressedRow = 1;
 
-                        // initiate voicePressed state (4 seconds)
-                        resetcc = millis() + 4000; 
+                        // initiate voicePressed state (checked after 4 seconds)
+                        resetcc = millis() + 4000;
                         voicePressed = true;
 
                         // sequence?

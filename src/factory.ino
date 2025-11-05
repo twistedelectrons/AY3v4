@@ -42,11 +42,13 @@ const byte factory[] = {
     71, 71, 71, 71, 71, 85, 71, 71, 71, 71, 71, 71, 71, 71, 85, 71, 63, 106, 7, 63, 1, 7, 63, 81, 7, 63, 107, 6, 63, 105, 8, 0, 106, 0, 32, 8, 223, 211, 3, 0, 8, 62, 3, 31, 85, 53, 170, 202, 3, 0, 18, 2, 1, 0, 15, 0, 0, 0, 0, 0,            // CPU CHAT
 };
 
-void factoryReset()
+void factoryReset(bool halfwayUp)
 {
     uint16_t x;
     for (uint16_t i = 0; i < 3840; i++) {
         x = i >= 1920 ? i-1920 : i;
+
+        if (halfwayUp && x == i) continue;
         EEPROM.update(i, factory[x]);
     }
 
@@ -55,6 +57,6 @@ void factoryReset()
     ledMatrixPic[2] = B000011;
     ledMatrixPic[3] = B011111;
     ledMatrixPic[4] = B000011;
-    ledMatrixPic[5] = B000011;
+    ledMatrixPic[5] = halfwayUp ? B100011 : B000011;
 }
 #endif

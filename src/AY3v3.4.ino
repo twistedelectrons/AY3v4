@@ -453,8 +453,10 @@ void setup()
 
 #if FACTORYRESET
     // FACTORY RECOVERY
-    if (!digitalRead(5) && !digitalRead(7)) // boot +noise btn +e btn
-        factoryReset(); // reinit EEPROM with factory data, shows a "F"
+    if (!digitalRead(5)) { // boot +noise btn +e (halfway: +a) btn
+        if      (!digitalRead(6)) factoryReset(true); // reinit EEPROM with factory data, shows a "F."
+        else if (!digitalRead(7)) factoryReset(false); // reinit EEPROM with factory data, shows a "F"
+    }
 #endif
 
     //

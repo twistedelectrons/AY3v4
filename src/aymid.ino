@@ -1,4 +1,5 @@
-//  AYMID player & remix routine 0.3
+//
+//  AYMID player & remix routine 1.0
 //  --------------------------------
 //
 //  notes:
@@ -825,6 +826,10 @@ void aymidUpdateEnvelopePitch(bool pitchUpdateEnvelope, byte maskBytes[], byte d
         // use alternate tuning?
         if (!aymidState.isCleanMode) {
 
+            ///////////////////
+            // PITCH SHIFTER
+            ///////////////////
+
             for (byte i = 0; i < AY3VOICES; i++) {
 
                 // found voice with override state ON
@@ -906,6 +911,10 @@ void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], by
             // use alternate tuning?
             if (!aymidState.isCleanMode) {
 
+                ///////////////////
+                // VOICE SNATCHER
+                ///////////////////
+
                 // found voice with override state ON
                 if (aymidState.overrideTone[chip][i] == OverrideState::ON) {
 
@@ -929,7 +938,7 @@ void aymidUpdatePitch(bool pitchUpdate[], byte maskBytes[], byte dataBytes[], by
                                     dataBytes[AY3_TONEA_PITCH_LO + 2 * v] = toneLO;
                                     dataBytes[AY3_TONEA_PITCH_HI + 2 * v] = toneHI;
 
-                                    // copy current enable state to target
+                                    // copy current enable state to target (but twisted!)
                                     if ((aymidState.lastAY3values[AY3_MIXER] & B00000001 << i))
                                         dataBytes[AY3_MIXER] &= ~(B00000001 << v);  // enable
                                     else dataBytes[AY3_MIXER] |=  B00000001 << v;   // disable

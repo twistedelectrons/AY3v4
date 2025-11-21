@@ -1,7 +1,13 @@
+//
+// Caution: Time-critical methods!
+//
+// Note: Don't touch any of them! The methods used by interrupts  
+// must not deviate in terms of content, handling or timer offset, so
+// that the sound does not change and no PWM timer related problems arise!
+// 
+
 void AY3  (byte address, byte data) { ay3Reg1[address] = data; }
 void AY32 (byte address, byte data) { ay3Reg2[address] = data; }
-
-// time critical methods!
 
 void updateAy3()
 {

@@ -1,6 +1,9 @@
+//
 // Arduino MIDI Library - callbacks:
+//
 // https://fortyseveneffects.github.io/arduino_midi_library/a00033.html
 // https://github.com/FortySevenEffects/arduino_midi_library/wiki/Using-Callbacks
+//
 
 #include "PedalHandler.h" // sustain pedal manager for multi-channel handling
 

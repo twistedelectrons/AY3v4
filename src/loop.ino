@@ -1,3 +1,10 @@
+//
+// Caution: Time-critical scanning!
+//
+// Note: Don't touch the scanning structure and counters of tick method.
+// The values are set so that no interference is caused by the PWM timer.
+// 
+
 void tick()
 {
     switch (tickcc)

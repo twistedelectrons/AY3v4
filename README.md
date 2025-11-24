@@ -1,14 +1,23 @@
-# AY3 version 4
+# AY3 version 4 - _"phoenix"_
 
 This is the Atmega1284 firmware for the [AY3 Synthesizer](https://www.twistedelectrons.com/ay3).
 
-Find the official releases at [the official product page](https://www.twistedelectrons.com/ay3).
-
-THANKS!
-
-A million thanks to RIO for fixing and opening the code!
+Find the official manual & files at [the official download page](https://www.twistedelectrons.com/downloads-firmware).
 
 ![Photo of the AY3](https://static.wixstatic.com/media/b8c32b_3ae5c456c0404cf6802aa7ab9bbe1163~mv2.jpeg)
+
+## What's new?
+
+- Supports three clock modes: **Atari ST**, **ZX Spectrum** (for newer Revision B boards), and **Legacy**
+- **Sustain pedal support** and an improved **voice allocation algorithm** for smoother synth performance
+- Includes the **AYMID protocol** for receiving and playing song data via a specialised Ay_Emul variant
+- Real-time **remix functions** for transforming incoming song data on the fly
+- Produces a **wide stereo spread** using two synchronised timers for precise chip updates
+- Comes with **32 flashable Creator sound presets** plus a unique memory system for storing user-customised data
+- Smooth, responsive control over all synth parameters
+- **Note-follow options** for noise and envelope generators
+- **Logarithmic and linear envelope shaping** available across the full range
+- Allows **linked or independent** editing of noise and envelope parameters across both chips
 
 ## Building and flashing the source code:
 

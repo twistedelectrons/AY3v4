@@ -4,7 +4,7 @@
 #include "mva.h"
 
 /***********************************
-    -= AY3 version 4 ( rc1 ) =-
+    -=    AY3 version 4.1    =-
       ~-~-= phoenix =-~-~-
 
         + synth engine overhaul
@@ -347,8 +347,8 @@ void setup()
 
     if (!masterChannel || masterChannel > 16) masterChannel = 1;
 
-    if (boardRevision) { updateAy32 = updateAy32B; BDIRPin = 15; }
-    else               { updateAy32 = updateAy32A; }
+    if (boardRevision == 1) { updateAy32 = updateAy32B; BDIRPin = 15; }
+    else                    { updateAy32 = updateAy32A; }
 
     pinMode(15, OUTPUT);
     DDRD = B11111100;

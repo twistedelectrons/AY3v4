@@ -1308,7 +1308,7 @@ void visualizeAY3LEDs() {
             if (vol[i])         setPoint(2, channel);
             else                clrPoint(2, channel);
 
-            if (n)              setPoint(3, channel);
+            if (amp[i] && n)    setPoint(3, channel);
             else                clrPoint(3, channel);
 
             if (env[i])         setPoint(4, channel);

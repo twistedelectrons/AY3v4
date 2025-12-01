@@ -101,12 +101,18 @@ void potTickAymid()
                         (analogTemp >> 2) < (potLast[pot] - 1)) {
 
                         bool volumeControlled = pressedRow == 2;
+                        bool octaveControlled = false;
 
                         ///// FULL SCALED /////
 
                         if (volumeControlled) {
 
-                            if (aymidState.isAltMode) {
+                            if (aymidState.isCtrlMode) {
+
+                                // OCTAVE
+                                octaveControlled = true;
+
+                            } else if (aymidState.isAltMode) {
 
                                 // PAN  0 <----- log ----- [15] --- rev.log ---> 31
                                 //             (0..15)    center   (16..31)
@@ -146,7 +152,7 @@ void potTickAymid()
                         analogTemp >>= 2;
 
                         // OCTAVE
-                        if (!volumeControlled && !aymidState.isCtrlMode) {
+                        if ((!volumeControlled && !aymidState.isCtrlMode) || octaveControlled) {
                             int8_t octave = getOctave(analogTemp);
 
                             for (byte chip = 0; chip < AY3CHIPS; chip++)

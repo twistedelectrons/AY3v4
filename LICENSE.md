@@ -1,6 +1,6 @@
 The following applies to the code in `src/` and `include/`:
 
-Copyright 2014 - 2025 Twisted-Electrons.
+Copyright 2014 - 2026 Twisted-Electrons.
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above

@@ -152,10 +152,10 @@ void receivedCC(int number, int value)
                     seqSpeed = (value >> 4) + 1; // 1...16
 
                     // default (10bit log/lin mix)
-                    if (envPeriodType == 0) {
+                    if (envPeriodType == ENV_PDTYPE_MIX) {
                         lastEnvSpeed = ((value + 1) << 3) - 1;  // 1023 (max 10bit)
                         setEnvSpeed(lastEnvSpeed);
-                    } else if (envPeriodType == 1) {
+                    } else if (envPeriodType == ENV_PDTYPE_LUT) {
                         lastEnvSpeedLUT = ((value + 1) << 1) - 1; // 255 (max 8bit)
                         setEnvSpeedLUT(lastEnvSpeedLUT);
                     }

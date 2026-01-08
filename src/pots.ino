@@ -230,7 +230,7 @@ void doPots()
                         (analogTemp >> 2) < (potLast[2] - 1)) {
 
                         // default (10bit log/lin mix)
-                        if (envPeriodType == 0) {
+                        if (envPeriodType == ENV_PDTYPE_MIX) {
                             lastEnvSpeed = analogTemp;
                             setEnvSpeed(lastEnvSpeed);
                         }
@@ -242,7 +242,7 @@ void doPots()
                         seqSpeed = 16 - (analogTemp >> 4); // 1...16
 
                         // alternate (old 8bit LUT)
-                        if (envPeriodType == 1) {
+                        if (envPeriodType == ENV_PDTYPE_LUT) {
                             lastEnvSpeedLUT = analogTemp;
                             setEnvSpeedLUT(analogTemp);
                         }

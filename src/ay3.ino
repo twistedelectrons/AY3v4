@@ -58,13 +58,17 @@ void mode_write2B()     { PORTD &= ~_BV(4); PORTD |= _BV(7); }  // digitalWrite 
 void mode_inactive2B()  { PORTD &= ~_BV(4); PORTD &= ~_BV(7); } // digitalWrite (12, LOW);  digitalWrite (15, LOW);
 
 
-// interrupts are disabled during the write pulse to the chip. This is to ensure that
+// interrupts could be disabled during the write pulse to the chip. This is to ensure that
 // the write signal time (tDW) is within the 10 us maximum spec. On a 16 MHz ATmega 328,
-// interrupts are disabled for about 4.5 us during each register write. (AY3891x lib)
+// interrupts are disabled for about 4.5 us during each register write. (notes of AY3891x)
 //
-// Disabling interrupts has another background: since it depends on an exact synchronization 
-// of the clock frequency (time-critical) in order not to cause clicks, all interrupts are 
-// stopped before the write process and thus in sync exactly at the time based on the specified values.
+// version 4.3 note: however, it has become apparent that the waiting time in between needs to be 
+// significantly extended in order to support boards (<r8) with chips such as the AY3-8912, which 
+// is why interrupts are not explicite disabled for this time, but rather "nops" are used. In order 
+// to write to a register of the AY-3-8913 or possibly also the AY-3-8912, the CPU must hold the 
+// data significantly longer (~1800 ns) than with the AY-3-8910 (~500 ns). Another reason could 
+// also be the shorter lines to the chips on the board.
+// https://www.fenarinarsa.com/?p=3183
 //
 // time-critical notes:
 // PWM hardware timers with different prescalers and modes are difficult to synchronize
@@ -88,23 +92,36 @@ void send1(unsigned char address, unsigned char data)
     PORTD |= _BV(4);    // digitalWrite (12, HIGH);
     PORTD |= _BV(5);    // digitalWrite (13, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(4);   // digitalWrite (12, LOW);
     PORTD &= ~_BV(5);   // digitalWrite (13, LOW);
 
     PORTC = data;
 
-    // noInterrupts
-    cli();
-
     // write
     PORTD |= _BV(5);    // digitalWrite (13, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(5);   // digitalWrite (13, LOW);
-
-    // interrupts
-    sei();
 }
 
 void send2A(unsigned char address, unsigned char data)
@@ -120,23 +137,36 @@ void send2A(unsigned char address, unsigned char data)
     PORTD |= _BV(4);    // digitalWrite (12, HIGH);
     PORTD |= _BV(6);    // digitalWrite (14, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(4);   // digitalWrite (12, LOW);
     PORTD &= ~_BV(6);   // digitalWrite (14, HIGH);
 
     PORTC = data;
 
-    // noInterrupts
-    cli();
-
     // write
     PORTD |= _BV(6);    // digitalWrite (14, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(6);   // digitalWrite (14, HIGH);
-
-    // interrupts
-    sei();
 }
 
 void send2B(unsigned char address, unsigned char data)
@@ -152,23 +182,36 @@ void send2B(unsigned char address, unsigned char data)
     PORTD |= _BV(4);    // digitalWrite (12, HIGH);
     PORTD |= _BV(7);    // digitalWrite (15, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(4);   // digitalWrite (12, LOW);
     PORTD &= ~_BV(7);   // digitalWrite (15, HIGH);
 
     PORTC = data;
 
-    // noInterrupts
-    cli();
-
     // write
     PORTD |= _BV(7);    // digitalWrite (15, HIGH);
 
+    // 8912 breath
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     // inactive
     PORTD &= ~_BV(7);   // digitalWrite (15, HIGH);
-
-    // interrupts
-    sei();
 }
 
 //
@@ -236,8 +279,8 @@ void setupTimerZX()
 {
     GTCCR = 1 << TSM | 1 << PSRASY | 1 << PSRSYNC;  // Halt all timers
 
-    ASSR    = 0;                // Reset Async status register, TIMER2 clk = CPU clk
-    TCNT2   = COUNT_DELAY_ZX;   // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
+    ASSR    = 0;            // Reset Async status register, TIMER2 clk = CPU clk
+    TCNT2   = CNT_DELAY_ZX; // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
 
     // 1,777MHz [PRESCALE = 64]
 
@@ -245,13 +288,13 @@ void setupTimerZX()
     TCCR1A = 0;
     TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK1 = _BV(OCIE1A);
-    TCNT1  = 2460;                                  // off: 4955/2 = 2477,5 (+0.5) ceil = 2478, [alt: 2400, 2451, 2454, 2457, 2460, 2466, 2469, 2472, 2475]
+    TCNT1  = 2460;                                  // off: 4955/2 = 2477,5 (+0.5) ceil = 2478, [alt: 2400, 2451, 2454, 2457, 2460*, 2466, 2469, 2472, 2475]
     OCR1A  = 4955;                                  // max: 1238*4 = 4952 (+3 by 50.44391) = 4955 
 
     TCCR3A = 0;
     TCCR3B = _BV(WGM32) | _BV(CS31) | _BV(CS30);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK3 = _BV(OCIE3A);
-    TCNT3  = 90;                                    // off: 0, [alt: 6, 90, 100]
+    TCNT3  = 90;                                    // off: 0, [alt: 6, 90*, 100]
     OCR3A  = 4955;                                  // max: 1238*4 = 4952 (+3 by 50.44391) = 4955
 
 #if LEDSUPPRESSION
@@ -270,8 +313,8 @@ void setupTimer()
 {
     GTCCR = 1 << TSM | 1 << PSRASY | 1 << PSRSYNC;  // Halt all timers
 
-    ASSR    = 0; // Reset Async status register, TIMER2 clk = CPU clk
-    TCNT2   = 0; // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
+    ASSR    = 0;    // Reset Async status register, TIMER2 clk = CPU clk
+    TCNT2   = 0;    // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
 
     // 500Khz [PRESCALE = 64]
 
@@ -304,8 +347,8 @@ void setupTimerAtari()
 {
     GTCCR = 1 << TSM | 1 << PSRASY | 1 << PSRSYNC;  // Halt all timers
 
-    ASSR    = 0; // Reset Async status register, TIMER2 clk = CPU clk
-    TCNT2   = 0; // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
+    ASSR    = 0;                // Reset Async status register, TIMER2 clk = CPU clk
+    TCNT2   = CNT_DELAY_ATARI;  // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
 
     // 2MHz [PRESCALE = 64]
 
@@ -313,13 +356,13 @@ void setupTimerAtari()
     TCCR1A = 0;
     TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK1 = _BV(OCIE1A);
-    TCNT1  = 2499;                                  // off: 4999/2 = 2499,5 (-0.5) trunc = 2499
+    TCNT1  = 2485;                                  // off: 4999/2 = 2499,5 (-0.5) trunc = 2499, [alt: 2469, 2472, 2475, 2481, 2482?, 2485*]
     OCR1A  = 4999;                                  // max: 4999 (50Hz)
 
     TCCR3A = 0;
     TCCR3B = _BV(WGM32) | _BV(CS31) | _BV(CS30);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK3 = _BV(OCIE3A);
-    TCNT3  = 0;                                     // off: 0
+    TCNT3  = 16;                                    // off: 0, [alt: 6, 7?, 10, 11?, 12?, 16*, 20, 21?, 22]
     OCR3A  = 4999;                                  // max: 4999 (50Hz)
 
 #if LEDSUPPRESSION

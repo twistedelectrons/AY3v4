@@ -61,8 +61,8 @@ void setEnvSpeedLUT(byte speed)
 
 void updateEnvSpeed()
 {
-    if      (envPeriodType == 0) setEnvSpeed(lastEnvSpeed);
-    else if (envPeriodType == 1) setEnvSpeedLUT(lastEnvSpeedLUT);
+    if      (envPeriodType == ENV_PDTYPE_MIX) setEnvSpeed(lastEnvSpeed);
+    else if (envPeriodType == ENV_PDTYPE_LUT) setEnvSpeedLUT(lastEnvSpeedLUT);
 }
 
 void stopEnvSpeed()
@@ -240,7 +240,7 @@ void preparePitches()
             destiPitch[channel] = calculatePitch(channel, PitchType::TONE);
 
             // envMode 1 and first channels of chip 1 & 2
-            if (envPeriodType == 0 && envMode == 1 && (channel == 1 || channel == 4)) {
+            if (envPeriodType == ENV_PDTYPE_MIX && envMode == 1 && (channel == 1 || channel == 4)) {
                 int envValue = calculatePitch(channel, PitchType::ENVELOPE);
 
                 // channel a

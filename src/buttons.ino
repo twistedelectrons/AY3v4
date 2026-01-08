@@ -555,7 +555,7 @@ void buttPressed(int pin, int state)
                         encEditPressed = false;
 
                         // envelope should toggle envelope speed mode
-                        if (pressedRow == 3 || (pressedRow == 4 && envPeriodType == 0)) {
+                        if (pressedRow == 3 || (pressedRow == 4 && envPeriodType == ENV_PDTYPE_MIX)) {
 
                             // no sequence?
                             if (seqSetup == NONE) {

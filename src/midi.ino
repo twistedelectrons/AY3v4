@@ -45,10 +45,15 @@ void handleSystemExclusive(const byte* buffer, unsigned int size)
 {
     if (size > 1) {
 
-        // Manufacturer ID used for AYMID
-        if (buffer[1] == 0x2E) {
+        // Manufacturer ID (46) used for AYMID
+        if (buffer[1] == 0x2E)
             aymidProcessMessage(buffer, size);
-        }
+
+        // Manufacturer ID (00 21 7F) used for twisted electrons + AY3
+        else if (buffer[1] == 0x00 && 
+                 buffer[2] == 0x21 && 
+                 buffer[3] == 0x7f && 
+                 buffer[4] == 0x03) configProcessMessage(buffer, size);
     }
 }
 
@@ -162,15 +167,15 @@ void receivedCC(int number, int value)
                     break;
 
         case 9:     // noise frequency chip 1 & 2
-                    setNoiseFreq(-1, value >> 2); // todo: original value * 8???
+                    setNoiseFreq(-1, value >> 2);
                     break;
 
         case 10:    // noise frequency chip 1
-                    setNoiseFreq(0, value >> 2); // todo: original value * 8???
+                    setNoiseFreq(0, value >> 2);
                     break;
 
         case 11:    // noise frequency chip 2
-                    setNoiseFreq(1, value >> 2); // todo: original value * 8???
+                    setNoiseFreq(1, value >> 2);
                     break;
 
         case 12:
@@ -414,11 +419,51 @@ void receivedNote(byte channel, byte note, byte vel)
 
     if (masterChannel == 1) {
 
-        // voice on/off for midichannel 2..7
-        if (channel >= 2 && channel <= 7) {
+        
+        if ((channel >= 2 && channel <= 7) ||   // voice on/off for midichannel 2..7     
+            (channel >= 9 && channel <= 14)) {  // noise on/off for midichannel 9..14
 
             // map midichannel to channels: 1..6
             byte s = channel-1; 
+
+            // map noise channels
+            if (s >= 8) s -= 7;
+
+            // prepare voice/noise bits
+            if (vel) {
+
+                // test released buffer of channel
+                if (!bufferedCh[channel-1]) {
+
+                    // buffer noise/voice bit of channel
+                    bitWrite(bufMatrixVoice, s-1, bitRead(ledMatrix[1], s-1));
+                    bitWrite(bufMatrixNoise, s-1, bitRead(ledMatrix[3], s-1));
+
+                    // flag channel as buffer
+                    bufferedCh[channel-1] = true;
+
+                    // force voice & noise bits to toggle by channel
+                    bitWrite(ledMatrix[1], s-1, channel >= 9 ? 0 : 1);
+                    bitWrite(ledMatrix[3], s-1, channel >= 9 ? 1 : 0);
+                }
+
+            } else {
+
+                // test flagged buffer of channel
+                if (bufferedCh[channel-1]) {
+
+                    // restore voice & noise bits of channel
+                    bitWrite(ledMatrix[1], s-1, bitRead(bufMatrixVoice, s-1));
+                    bitWrite(ledMatrix[3], s-1, bitRead(bufMatrixNoise, s-1));
+
+                    // release channel as buffer
+                    bufferedCh[channel-1] = false;
+
+                    // reset buffer
+                    bufMatrixVoice = 0;
+                    bufMatrixNoise = 0;
+                }
+            }
 
             // note on
             if (vel) {
@@ -446,8 +491,15 @@ void receivedNote(byte channel, byte note, byte vel)
                 // update pitch
                 assignChannelPitch(s);
 
-                // exceed arp counter (reset)
-                if (held[s] == 1) arpcc = 0x0400;
+                if (held[s] == 1) {
+
+                    // retrigger mixer
+                    processMixer(false);
+
+                    // exceed arp counter (reset)
+                    arpcc = 0x0400;
+
+                } else processMixer(false);
 
             // note off
             } else {
@@ -464,8 +516,13 @@ void receivedNote(byte channel, byte note, byte vel)
                 isort(noteMem[s], held[s] + 1);
 
                 // free
-                if (held[s] == 0)
+                if (held[s] == 0) {
+
+                    // update mixer
+                    processMixer(false);
+
                     base[s] = 0;
+                }
             }
         }
 
@@ -499,15 +556,6 @@ void receivedNote(byte channel, byte note, byte vel)
                     }
                 }
             }
-        }
-
-        // noise on/off - midichannel 9..14 to channels-1
-        if (channel >= 9 && channel <= 14) {
-
-            byte i = channel-9; // channel-9: 0, 1, 2, 3, 4, 5
-
-            if (vel)    bitWrite(ledMatrix[3], i, 1);
-            else        bitWrite(ledMatrix[3], i, 0);
         }
     }
 }

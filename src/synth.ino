@@ -516,9 +516,9 @@ void setMixer(bool updateStep)
         bitWrite(data, 2, !bitRead(ledMatrix[1], i+3 - 1)); // C
 
         // NOISE (ENABLED BY HELD NOTE)
-        bitWrite(data, 3, held[MASTER] ? !bitRead(ledMatrix[3], i+1 - 1) : 1); // A
-        bitWrite(data, 4, held[MASTER] ? !bitRead(ledMatrix[3], i+2 - 1) : 1); // B
-        bitWrite(data, 5, held[MASTER] ? !bitRead(ledMatrix[3], i+3 - 1) : 1); // C
+        bitWrite(data, 3, (held[MASTER] || bufferedCh[i+8])     ? !bitRead(ledMatrix[3], i+1 - 1) : 1); // A
+        bitWrite(data, 4, (held[MASTER] || bufferedCh[i+9])     ? !bitRead(ledMatrix[3], i+2 - 1) : 1); // B
+        bitWrite(data, 5, (held[MASTER] || bufferedCh[i+10])    ? !bitRead(ledMatrix[3], i+3 - 1) : 1); // C
 
         if (updateStep) {
 

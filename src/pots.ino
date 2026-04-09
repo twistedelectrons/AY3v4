@@ -80,6 +80,9 @@ void potTickAymid()
                             // FINE TUNE
                             for (byte chip = 0; chip < AY3CHIPS; chip++)
                                 aymidState.adjustNoisePeriod[chip] = POT_VALUE_TO_AYMID_NOISE_PERIOD(analogTemp);
+
+                            // NOISE FREQ FORCE by SHIFT
+                            aymidState.isNoiseFreqForceMode = aymidState.isAltMode;
                         }
 
                         ///// CRUSHED SIZE /////

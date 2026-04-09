@@ -1,13 +1,15 @@
 #include <MIDI.h>
 #include <EEPROM.h>
 #include <assert.h>
+#include <avr/wdt.h>
 #include "mva.h"
 
 /***********************************
-    -=    AY3 version 4.3    =-
+    -=    AY3 version 4.4    =-
       ~-~-= phoenix =-~-~-
 
         + synth engine overhaul
+        + calibration support
         + AYMID support
 
     twisted electrons  (c) 2026
@@ -31,10 +33,16 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 #define CLOCK_LOW_EMU   1           // CLOCK LOW FREQ ADAPTION (500Hz), old firmware emulation
 #define PITCHADJUSTMENT 1           // PITCHES ARE CALCULATED 2 OCTAVES DOWN
 #define USEVERSIONFLAG  1           // VALIDATES A VERSION FLAG TO IDENTIFY CONFIG STATE
+#define USECALIBRATION  1           // ENABLE USER CALIBRATION
 
 // timing (!don't touch!)
 #define CNT_DELAY_ZX    7           // time-critical (sync: 0..8)           <<< initial offset <<< ?
 #define CNT_DELAY_ATARI 1           // time-critical (sync: 0..3)           <<< initial offset <<< ? or start delayed with overflow e.g.: 7 --> 255
+#define OFFSET_L_ATARI  2478        // offset chip 1 (left)     ATARI  (max: 2499)
+#define OFFSET_R_ATARI  42          // offset chip 2 (right)    ATARI  (max: 2499)
+#define OFFSET_L_ZX     2460        // offset chip 1 (left)     ZX     (max: 2478)
+#define OFFSET_R_ZX     90          // offset chip 2 (right)    ZX     (max: 2478)
+
 #define ASYNC_DELAY     62          // time-critical (sync: 31, 62, 124..)  >>> fine offset >>> ?
 #define ENC_TIMER       300
 #define SAMPLE_CYCLE    30          // sampling of pitches & glides
@@ -70,6 +78,12 @@ enum class PitchType { TONE, NOISE, ENVELOPE };
 
 #define ENCPINA         11          // CLK
 #define ENCPINB         10          // DATA
+
+#define CALIBRATION_ST1 0x21        // ID1 ATARI
+#define CALIBRATION_ST2 0x61        // ID2 ATARI
+#define CALIBRATION_ZX1 0x41        // ID1 ZX
+#define CALIBRATION_ZX2 0x81        // ID2 ZX
+#define CALIBRATION_OFF 0
 
 // consts
 #define AY3VOICES       3
@@ -124,6 +138,16 @@ byte masterChannel;                 // located at 3843
 byte boardRevision;                 // located at 3844
 byte clockType;                     // located at 3845
 byte envPeriodType;                 // located at 3846
+
+bool calibratedZX       = false;
+bool calibratedAtari    = false;
+
+byte cntDelayZX         = CNT_DELAY_ZX;
+byte cntDelayAtari      = CNT_DELAY_ATARI;
+uint16_t offsetL_ZX     = OFFSET_L_ZX;
+uint16_t offsetR_ZX     = OFFSET_R_ZX;
+uint16_t offsetL_Atari  = OFFSET_L_ATARI;
+uint16_t offsetR_Atari  = OFFSET_R_ATARI;
 
 // general
 byte writeConfig        = 0;
@@ -193,6 +217,8 @@ byte oldNumber;
 byte oldMatrix[7];
 byte ledMatrix[7];
 byte ledMatrixPic[7];
+byte bufMatrixVoice;
+byte bufMatrixNoise;
 
 // synth
 int base[7]             = { 0, 0, 0, 0, 0, 0, 0 };
@@ -231,6 +257,7 @@ byte chord              = 1;
 byte glide              = 1;
 int bender              = 64;
 byte clockSpeeds[]      = { 0, 1, 2, 3, 4, 6, 8, 12, 16, 18, 24, 32, 36, 40, 48, 56 };
+bool bufferedCh[13];
 
 float lfoIncrements[]   = { 0.01041, 0.01388, 0.02083, 0.04166, 
                             0.08333, 0.16666, 0.33333, 0.5 };
@@ -305,13 +332,23 @@ const int noteTp[] = {                                  //              C-Notes 
 //void setEnvSpeed(uint16_t, uint16_t = 0);   // e.g. 1st required, 2nd optional
 
 //
+// INIT3
+//
+
+#include <avr/wdt.h>
+void reset(void) __attribute__((naked)) __attribute__((section(".init3")));
+void reset(void) {
+    MCUSR = 0;
+    wdt_disable();
+}
+
+//
 // SETUP
 //
 
 // the setup routine runs once when you press reset:
 void setup()
 {
-
 #if USEVERSIONFLAG
     byte version = EEPROM.read(3840);
 
@@ -344,6 +381,26 @@ void setup()
     clockType           = EEPROM.read(3845);
     envPeriodType       = EEPROM.read(3846);
 
+#if USECALIBRATION
+    // CALIBRATION
+    if (CALIBRATION_ST1 == EEPROM.read(3850) &&
+        CALIBRATION_ST2 == EEPROM.read(3851)) {
+
+        offsetL_Atari = (EEPROM.read(3853) << 7) | EEPROM.read(3852);
+        offsetR_Atari = (EEPROM.read(3855) << 7) | EEPROM.read(3854);
+        cntDelayAtari = EEPROM.read(3856);
+        calibratedAtari = true;
+    }
+
+    if (CALIBRATION_ZX1 == EEPROM.read(3857) &&
+        CALIBRATION_ZX2 == EEPROM.read(3858)) {
+
+        offsetL_ZX = (EEPROM.read(3860) << 7) | EEPROM.read(3859);
+        offsetR_ZX = (EEPROM.read(3862) << 7) | EEPROM.read(3861);
+        cntDelayZX = EEPROM.read(3863);
+        calibratedZX = true;
+    }
+#endif
 
     // validation of limit values and standard initialisation
     // ------------------------------------------------------
@@ -456,9 +513,34 @@ void setup()
     // ENTER: BOARD REVISION SETUP
     if (!digitalRead(6)) // boot +voice btn
     {
-        writeConfig = CFG_REVISION;
-        seqSetup = EDIT;
-        selectedStep = boardRevision;
+        if (!digitalRead(7)) { // +d btn
+            EEPROM.write(3850, CALIBRATION_OFF);
+            EEPROM.write(3851, CALIBRATION_OFF);
+            EEPROM.write(3857, CALIBRATION_OFF);
+            EEPROM.write(3858, CALIBRATION_OFF);
+
+            // reset
+            cntDelayZX      = CNT_DELAY_ZX;
+            cntDelayAtari   = CNT_DELAY_ATARI;
+            offsetL_ZX      = OFFSET_L_ZX;
+            offsetR_ZX      = OFFSET_R_ZX;
+            offsetL_Atari   = OFFSET_L_ATARI;
+            offsetR_Atari   = OFFSET_R_ATARI;
+
+            // show: x
+            displaycc = 0;
+            ledMatrixPic[1] = B110011;
+            ledMatrixPic[2] = B110011;
+            ledMatrixPic[3] = B011110;
+            ledMatrixPic[4] = B110011;
+            ledMatrixPic[5] = B110011;
+
+        } else {
+
+            writeConfig = CFG_REVISION;
+            seqSetup = EDIT;
+            selectedStep = boardRevision;
+        }
     }
 
     PORTA |= _BV(1);  // digitalWrite (A1-25, HIGH);

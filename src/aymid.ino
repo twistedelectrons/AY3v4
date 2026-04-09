@@ -22,11 +22,11 @@
 #define POT_VALUE_TO_AYMID_PAN_RIGHT(x) (min(31, max(16, 31-POT_VALUE_TO_AYMID_LOG15((511+(512-x))))))  // 16..31 (rev.log)
 #define POT_VALUE_TO_AYMID_FINETUNE(x) (x >> 1)
 #define POT_VALUE_TO_AYMID_FINETUNE_ENV(x) (x << 1)
-#define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (x >> 5)
+#define POT_VALUE_TO_AYMID_NOISE_PERIOD(x) (x >> 4)
 
 #define PAN_NOON        15
 #define VOLUME_AY3FILE  16
-#define NOISE_AY3FILE   32
+#define NOISE_AY3FILE   64
 
 union selected_AY3s_t {
     byte selection;
@@ -77,6 +77,7 @@ struct aymidState_t {
     byte copyVoice;
 
     bool isChipSelectionMode; // unused
+    bool isNoiseFreqForceMode;
 
     byte lastAY3values[AY3_REGISTERS];
 
@@ -170,6 +171,8 @@ void aymidInit(int chip) { // TODO
         aymidState.selectedAY3s.selection = 0;
         aymidState.isChipSelectionMode = false;
     }
+
+    aymidState.isNoiseFreqForceMode = false;
 
     aymidState.isShiftMode = false;
     aymidState.isAltMode = false;
@@ -338,6 +341,7 @@ void aymidRestoreVoice(int chip, int voice, InitState init) {
     if (init == InitState::ALL) {
         aymidRestoreEnvelope(chip);
         aymidRestoreNoisePeriod(chip);
+        aymidState.isNoiseFreqForceMode = false;
     }
 
     updateLastAY3Values(chip, voice, init);
@@ -994,8 +998,19 @@ bool runNoise(byte chip, byte voice, byte* data) {
     // Noise (limit to 32)
     byte noise = aymidState.adjustNoisePeriod[chip];
     if (noise < NOISE_AY3FILE) {
-        noise = NOISE_AY3FILE - noise;
-        noise = max(0, min(31, noise));
+
+        if (aymidState.isNoiseFreqForceMode) {
+
+            // absolute: 32 .. 0
+            noise = (NOISE_AY3FILE - noise) >> 1;
+            noise = max(0, min(31, noise));
+            
+        } else {
+
+            // relative: 32 (lo) .. 0 .. -31 (hi)
+            int8_t off = (NOISE_AY3FILE >> 1) - noise;
+            noise = max(0, min(31, *data + off));
+        }
         *data = noise;
     }
 

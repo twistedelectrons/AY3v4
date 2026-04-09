@@ -280,7 +280,7 @@ void setupTimerZX()
     GTCCR = 1 << TSM | 1 << PSRASY | 1 << PSRSYNC;  // Halt all timers
 
     ASSR    = 0;            // Reset Async status register, TIMER2 clk = CPU clk
-    TCNT2   = CNT_DELAY_ZX; // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
+    TCNT2   = cntDelayZX;   // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
 
     // 1,777MHz [PRESCALE = 64]
 
@@ -288,13 +288,13 @@ void setupTimerZX()
     TCCR1A = 0;
     TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK1 = _BV(OCIE1A);
-    TCNT1  = 2460;                                  // off: 4955/2 = 2477,5 (+0.5) ceil = 2478, [alt: 2400, 2451, 2454, 2457, 2460*, 2466, 2469, 2472, 2475]
+    TCNT1  = offsetL_ZX;                            // off: 4955/2 = 2477,5 (+0.5) ceil = 2478, [alt: 2400, 2451, 2454, 2457, 2460*, 2466, 2469, 2472, 2475]
     OCR1A  = 4955;                                  // max: 1238*4 = 4952 (+3 by 50.44391) = 4955 
 
     TCCR3A = 0;
     TCCR3B = _BV(WGM32) | _BV(CS31) | _BV(CS30);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK3 = _BV(OCIE3A);
-    TCNT3  = 90;                                    // off: 0, [alt: 6, 90*, 100]
+    TCNT3  = offsetR_ZX;                            // off: 0, [alt: 6, 90*, 100]
     OCR3A  = 4955;                                  // max: 1238*4 = 4952 (+3 by 50.44391) = 4955
 
 #if LEDSUPPRESSION
@@ -348,7 +348,7 @@ void setupTimerAtari()
     GTCCR = 1 << TSM | 1 << PSRASY | 1 << PSRSYNC;  // Halt all timers
 
     ASSR    = 0;                // Reset Async status register, TIMER2 clk = CPU clk
-    TCNT2   = CNT_DELAY_ATARI;  // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
+    TCNT2   = cntDelayAtari;    // Reset Clock Counter (between 0..4) or adjust with repeating: asm volatile ("nop");
 
     // 2MHz [PRESCALE = 64]
 
@@ -356,13 +356,13 @@ void setupTimerAtari()
     TCCR1A = 0;
     TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK1 = _BV(OCIE1A);
-    TCNT1  = 2485;                                  // off: 4999/2 = 2499,5 (-0.5) trunc = 2499, [alt: 2469, 2472, 2475, 2481, 2482?, 2485*]
+    TCNT1  = offsetL_Atari;                         // off: 4999/2 = 2499,5 (-0.5) trunc = 2499, [alt: 2469, 2472, 2475, 2481, 2482?, 2485?, 2478*]
     OCR1A  = 4999;                                  // max: 4999 (50Hz)
 
     TCCR3A = 0;
     TCCR3B = _BV(WGM32) | _BV(CS31) | _BV(CS30);    // CTC (OCR2A = TOP), PRESCALE = 64
     TIMSK3 = _BV(OCIE3A);
-    TCNT3  = 16;                                    // off: 0, [alt: 6, 7?, 10, 11?, 12?, 16*, 20, 21?, 22]
+    TCNT3  = offsetR_Atari;                         // off: 0, [alt: 6, 7?, 10, 11?, 12?, 16?, 20, 21?, 22, 29, 32, 42*, 48]
     OCR3A  = 4999;                                  // max: 4999 (50Hz)
 
 #if LEDSUPPRESSION

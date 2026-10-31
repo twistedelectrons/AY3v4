@@ -609,6 +609,9 @@ void aymidToggleVolume(int chip, int voice) {
 
     // otherwise toggle turn off / AY3FILE
     } else aymidToggleVoiceValueGte(chip, voice, aymidState.adjustVolume, VOLUME_AY3FILE);
+
+    // update volume register instant
+    aymidUpdateVolume(chip, voice);
 }
 
 /*

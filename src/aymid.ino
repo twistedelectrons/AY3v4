@@ -194,16 +194,20 @@ void aymidInitVoice(int chip, byte voice, InitState init) {
     for (byte chip = first; chip <= last; chip++) {
 
         bool initAll        = init == InitState::ALL || init == InitState::ALLSTATES;
-        bool initTone       = init == InitState::ALL || init == InitState::TONE;
-        bool initNoise      = init == InitState::ALL || init == InitState::NOISE;
-        bool initEnvelope   = init == InitState::ALL || init == InitState::ENVELOPE;
-        bool initAmplitude  = init == InitState::ALL || init == InitState::AMP;
+        bool initTone       = init == InitState::ALL || init == InitState::ALLSTATES || init == InitState::TONE;
+        bool initNoise      = init == InitState::ALL || init == InitState::ALLSTATES || init == InitState::NOISE;
+        bool initEnvelope   = init == InitState::ALL || init == InitState::ALLSTATES || init == InitState::ENVELOPE;
+        bool initAmplitude  = init == InitState::ALL || init == InitState::ALLSTATES || init == InitState::AMP;
 
         if (initTone) {
             aymidState.muteVoice[chip][voice] = false;
             aymidState.overrideTone[chip][voice] = OverrideState::AY3FILE;
-            aymidState.adjustOctave[chip][voice] = 0;
-            aymidState.adjustFine[chip][voice] = POT_VALUE_TO_AYMID_FINETUNE(POT_NOON);
+
+            // skip pitch for state update
+            if (init != InitState::ALLSTATES) {
+                aymidState.adjustOctave[chip][voice] = 0;
+                aymidState.adjustFine[chip][voice] = POT_VALUE_TO_AYMID_FINETUNE(POT_NOON);
+            }
         }
 
         if (initNoise)
@@ -605,6 +609,9 @@ void aymidToggleVolume(int chip, int voice) {
 
     // otherwise toggle turn off / AY3FILE
     } else aymidToggleVoiceValueGte(chip, voice, aymidState.adjustVolume, VOLUME_AY3FILE);
+
+    // update volume register instant
+    aymidUpdateVolume(chip, voice);
 }
 
 /*
@@ -685,6 +692,37 @@ void aymidToggleVoice(int chip, byte voice, bool asXOR) {
     if (!asXOR && (isRemixedTone || isRemixedNoise || isRemixedEnv))
         aymidRestoreVoice(chip, voice, InitState::ALLSTATES);
     else updateLastAY3Values(chip, voice, InitState::ALLSTATES);
+}
+
+/*
+ * Switch (hard) "remix to restore" and "restore to mute", used when
+ * pressing ctrl (seq) button within selected col: affects a, b or c
+ */
+void aymidSwitchVoice(int chip, byte voice) {
+    bool isRemixedTone, isRemixedNoise, isRemixedEnv;
+
+    // detect
+    isRemixedTone  = aymidDetectRemix(chip, voice, aymidState.overrideTone);
+    isRemixedNoise = aymidDetectRemix(chip, voice, aymidState.overrideNoise);
+    isRemixedEnv   = aymidDetectRemix(chip, voice, aymidState.overrideEnv);
+
+    // restore
+    byte first  = voice > -1 ? voice : 0;
+    byte last   = voice > -1 ? voice : AY3VOICES - 1;
+
+    for (byte voice = first; voice <= last; voice++) 
+        aymidInitVoice(chip, voice, InitState::ALL);
+
+    // was not remixed --> toggle all to mute
+    if (!isRemixedTone && !isRemixedNoise && !isRemixedEnv) {
+        aymidToggleState(chip, voice, InitState::TONE,    aymidState.overrideTone,    aymidState.overrideToneBuf, false);
+        aymidToggleState(chip, voice, InitState::NOISE,   aymidState.overrideNoise,   aymidState.overrideNoiseBuf,false);
+        aymidToggleState(chip, voice, InitState::ENVELOPE,aymidState.overrideEnv,     aymidState.overrideEnvBuf,  false);        
+        aymidToggleVolume(chip, voice);
+    }
+
+    // update
+    updateLastAY3Values(chip, voice, InitState::ALLSTATES);
 }
 
 /*

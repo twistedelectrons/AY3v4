@@ -169,8 +169,14 @@ void buttPressedAymid(int pin, int state)
             case 2:     // CHANNEL: b
             case 6:     // CHANNEL: c
 
-                        if (aymidState.isCtrlMode) aymidToggleVoice(chip, index, true);
-                        else {
+                        if (aymidState.isCtrlMode) {
+
+                            // special case row 1
+                            if (pressedRow == 1)
+                                aymidToggleVolume(chip, index);
+                            else aymidSwitchVoice(chip, index);
+
+                        } else {
                             switch (pressedRow) {
                                 case 1: aymidOverrideVoice(chip, index, aymidState.overrideTone, aymidState.isAltMode ? TGL_AY3FILE_ON : TGL_AY3FILE_OFF);  break;
                                 case 2: aymidToggleVolume(chip, index);                                                                                     break;

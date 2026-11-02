@@ -23,8 +23,9 @@ void potTickAymid()
 
         case 0:     // 1 POT - [ ENVELOPE ] - (LFO/ARP SPEED)
                     analogTemp = analogRead(A4);
-                    if ((analogTemp >> 2) > (potLast[pot] + 1) || 
-                        (analogTemp >> 2) < (potLast[pot] - 1)) {
+                    if (!aymidState.isShiftMode && (
+                        (analogTemp >> 2) > (potLast[pot] + 1) || 
+                        (analogTemp >> 2) < (potLast[pot] - 1))) {
 
                         ///// FULL SCALED /////
 
@@ -64,8 +65,9 @@ void potTickAymid()
 
         case 1:     // 2 POT - [ NOISE ] - (LFO/ARP DEPTH)
                     analogTemp = analogRead(A5);
-                    if ((analogTemp >> 2) > (potLast[pot] + 1) || 
-                        (analogTemp >> 2) < (potLast[pot] - 1)) {
+                    if (!aymidState.isShiftMode && (
+                        (analogTemp >> 2) > (potLast[pot] + 1) || 
+                        (analogTemp >> 2) < (potLast[pot] - 1))) {
 
                         ///// FULL SCALED /////
 
@@ -100,8 +102,9 @@ void potTickAymid()
         case 4:     // 4 POT - [ TONE A ] - (DETUNE)
 
                     analogTemp = analogRead(apins[pot]);
-                    if ((analogTemp >> 2) > (potLast[pot] + 1) || 
-                        (analogTemp >> 2) < (potLast[pot] - 1)) {
+                    if (!aymidState.isShiftMode && (
+                        (analogTemp >> 2) > (potLast[pot] + 1) || 
+                        (analogTemp >> 2) < (potLast[pot] - 1))) {
 
                         bool volumeControlled = pressedRow == 2;
                         bool octaveControlled = false;
